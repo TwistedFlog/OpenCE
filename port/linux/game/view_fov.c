@@ -43,43 +43,71 @@ unsigned long config_changes(void);
 static real reticle_scales[MAXIMUM_LOCAL_PLAYERS];
 static real authored_vertical[MAXIMUM_LOCAL_PLAYERS];
 
+static real requested_fov_tangent(char const *name)
+{
+	double degrees = config_real(name);
+
+	return degrees >= 20.0 && degrees <= 150.0 ?
+		(real)(tan(degrees * _pi / 360.0) * (9.0 / 16.0)) : 0.0f;
+}
+
 /* the view's vertical angle for display.fov: the game's own in a vehicle,
 dead, in a cinematic, a scripted camera or a view the director holds, and
-at a scope's full zoom; between, the zoom's own transition */
+at a scope's full zoom; between, the zoom's own transition. The third-person
+camera's (following_camera.c: vehicles and MCC weapons held in third
+person) is display.third_person_fov's, the same way from its stock 70 */
 static real render_fov_adjust(short local_player_index, real native_vertical_field_of_view)
 {
 	static boolean initialized;
 	static unsigned long read_at;
-	static real requested_tangent;
+	static real first_person_tangent, third_person_tangent;
 	unsigned long changes = config_changes();
 	long unit_index, weapon_index;
 	struct unit_datum *unit;
+	real requested_tangent;
 	real unzoomed_angle, unzoomed_tangent, native_tangent, adjusted_tangent;
+	boolean third_person;
 
 	if (!initialized || read_at != changes)
 	{
-		double degrees = config_real("display.fov");
-
 		initialized = TRUE;
 		read_at = changes;
-		requested_tangent = degrees >= 20.0 && degrees <= 150.0 ?
-			(real)(tan(degrees * _pi / 360.0) * (9.0 / 16.0)) : 0.0f;
+		first_person_tangent = requested_fov_tangent("display.fov");
+		third_person_tangent = requested_fov_tangent("display.third_person_fov");
 	}
-	if (!requested_tangent || local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
+	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS ||
 		cinematic_in_progress() || (director_camera_scripted && *director_camera_scripted) ||
-		director_get_perspective(local_player_index) != _director_perspective_first_person ||
 		director_inhibited_facing(local_player_index))
 	{
 		return native_vertical_field_of_view;
 	}
+	switch (director_get_perspective(local_player_index))
+	{
+	case _director_perspective_first_person:
+		third_person = FALSE;
+		requested_tangent = first_person_tangent;
+		break;
+	case _director_perspective_third_person:
+		third_person = TRUE;
+		requested_tangent = third_person_tangent;
+		break;
+	default:
+		return native_vertical_field_of_view;
+	}
+	if (!requested_tangent)
+		return native_vertical_field_of_view;
 	unit_index = player_control_get_unit_index(local_player_index);
 	if (unit_index == NONE)
 		return native_vertical_field_of_view;
 	unit = unit_try_and_get(unit_index);
-	if (!unit || unit->object.parent_object_index != NONE || TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
+	if (!unit || (!third_person && unit->object.parent_object_index != NONE) ||
+		TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
+	{
 		return native_vertical_field_of_view;
+	}
 
-	unzoomed_angle = unit_definition_get(unit->definition_index)->unit.camera_field_of_view;
+	unzoomed_angle = third_person ? DEGREES_TO_RADIANS(70.f) :
+		unit_definition_get(unit->definition_index)->unit.camera_field_of_view;
 	if (!(unzoomed_angle >= 0.001f && unzoomed_angle <= _pi / 2.0f) ||
 		!(native_vertical_field_of_view > 0.0f && native_vertical_field_of_view < _pi))
 	{

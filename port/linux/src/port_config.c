@@ -126,6 +126,10 @@ static const struct config_setting config_settings[] =
 		"The first-person view's field of view on foot, in degrees across at\n"
 		"16:9 (20 to 150); 0 keeps the stock view. Vehicles, cinematics and\n"
 		"scripted cameras keep their own." },
+	{ "display.third_person_fov", _config_real, "0.0", "HALO_THIRD_PERSON_FOV", _environment_value, _platform_all,
+		"The third-person camera's field of view (vehicles, and MCC weapons\n"
+		"that are held in third person), in degrees across at 16:9 (20 to\n"
+		"150); 0 keeps the stock view. A weapon's zoom narrows it." },
 	{ "display.viewmodel_fov", _config_real, "0.0", "HALO_VIEWMODEL_FOV", _environment_value, _platform_all,
 		"The first-person weapon's and hands' field of view, in degrees across\n"
 		"at 16:9 (20 to 150); 0 keeps the weapon's stock view, also when\n"

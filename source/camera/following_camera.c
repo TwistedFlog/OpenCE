@@ -48,6 +48,8 @@ symbols in this file:
 
 #include "game/game_globals.h"
 #include "game/players.h"
+#include "items/weapons.h"
+#include "mcc_camera.h" /* port: port/linux/game/mcc_camera.c */
 #include "objects/objects.h"
 #include "scenario/scenario.h"
 #include "tag_files/tag_groups.h"
@@ -181,6 +183,25 @@ void following_camera_deterministic(
 		forward_y *= horizontal_magnitude;
 	}
 
+	/* port: an MCC third-person weapon aims from the camera it is seen
+	through (mcc_camera.c), so its shots converge on the crosshair
+	(aim_assist.c): placed as following_camera_update and the observer
+	place it, with the track's side mirrored and its distance at least 0.6 */
+	if (mcc_camera_weapon_following(unit_index))
+	{
+		real depth = magnitude3d(&offset);
+		real_vector3d focus_offset;
+
+		focus_offset.i = depth * cosine(pitch) + offset.i;
+		focus_offset.j = -offset.j;
+		focus_offset.k = depth * sine(pitch) + offset.k;
+		depth = MAX(depth, 0.6f);
+		position->x += focus_offset.i * forward_x + focus_offset.j * forward_y - forward->i * depth;
+		position->y += focus_offset.i * forward_y - focus_offset.j * forward_x - forward->j * depth;
+		position->z += focus_offset.k - forward->k * depth;
+		return;
+	}
+
 	position->x = offset.j * forward_y + offset.i * forward_x + position->x;
 	position->y = offset.i * forward_y - offset.j * forward_x + position->y;
 	position->z += offset.k;
@@ -272,6 +293,27 @@ void following_camera_update(
 		command->depth = MAX(
 			(command->depth - 0.6f) * camera->distance_scale + 0.6f,
 			0.6f);
+
+		/* port: an MCC third-person weapon zooms from this camera
+		(mcc_camera.c), narrowing over the first-person camera's 0.18s */
+		if (mcc_camera_weapon_following(camera_info.unit_index) && unit->unit.current_zoom_level != NONE)
+		{
+			long weapon_index = unit_inventory_get_weapon(camera_info.unit_index, unit->unit.current_weapon_index);
+
+			if (weapon_index != NONE)
+			{
+				command->field_of_view = weapon_get_field_of_view(
+					weapon_index,
+					command->field_of_view,
+					unit->unit.current_zoom_level);
+			}
+		}
+		if (camera->initialized && camera->zoom_level != unit->unit.current_zoom_level)
+		{
+			result->parameter_flags[3] = TRUE;
+			result->parameter_timers[3] = MAX(0.18f, result->parameter_timers[3]);
+		}
+		camera->zoom_level = unit->unit.current_zoom_level;
 
 		object_get_velocities(camera_info.unit_index, &command->velocity, NULL);
 		SET_FLAG(command->flags, 0, TRUE);

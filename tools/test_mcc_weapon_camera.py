@@ -101,7 +101,7 @@ int main(int argc,char **argv){
     }else if(!strcmp(argv[1],"lifecycle")){
         units[0].object.damage_flags=1;CHECK(!mcc_camera_weapon_following(0x10000));
         units[0].object.damage_flags=0;CHECK(mcc_camera_weapon_following(0x10000));
-        units[0].unit.current_zoom_level=0;CHECK(!mcc_camera_weapon_following(0x10000));
+        units[0].unit.current_zoom_level=0;CHECK(mcc_camera_weapon_following(0x10000));
         units[0].unit.current_zoom_level=NONE;CHECK(mcc_camera_weapon_following(0x10000));
     }else if(!strcmp(argv[1],"seats")){
         units[0].object.parent_object_index=1;units[1].object.type=1;

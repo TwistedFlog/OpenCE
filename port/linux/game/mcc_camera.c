@@ -17,9 +17,9 @@ boolean mcc_camera_weapon_following(long unit_index)
 
     if (!mcc_cache_tags_loaded() || unit_index == NONE) return FALSE;
     unit = unit_try_and_get(unit_index);
+    /* (zoomed too: the following camera narrows to the weapon's zoom) */
     if (!unit || unit->object.parent_object_index != NONE ||
-        TEST_FLAG(unit->object.damage_flags, _object_dead_bit) ||
-        unit->unit.current_zoom_level != NONE) return FALSE;
+        TEST_FLAG(unit->object.damage_flags, _object_dead_bit)) return FALSE;
     slot = unit->unit.current_weapon_index;
     if (slot < 0 || slot >= MAXIMUM_WEAPONS_PER_UNIT) return FALSE;
     weapon_index = unit->unit.weapon_object_indices[slot];
