@@ -54,6 +54,7 @@ symbols in this file:
 #include "math/real_math_cones.h"
 #include "items/weapon_definitions.h"
 #include "items/weapons.h"
+#include "mcc_camera.h" /* port: port/linux/game/mcc_camera.c */
 #include "objects/objects.h"
 #include "physics/collision_usage.h"
 #include "physics/collisions.h"
@@ -548,6 +549,8 @@ long player_aim_projectile(
 	struct player_datum *player= player_get(player_index);
 	long aiming_unit_index= unit_get_aiming_unit_index(player->unit_index);
 	struct aim_assist_parameters parameters;
+	boolean assisted;
+	boolean third_person;
 
 	match_assert_valid_real_normal3d(
 		"c:\\halo\\SOURCE\\game\\aim_assist.c",
@@ -560,7 +563,12 @@ long player_aim_projectile(
 		global_current_collision_user_depth < MAXIMUM_COLLISION_USER_STACK_DEPTH);
 	global_current_collision_users[global_current_collision_user_depth++] = _collision_user_aim_assist;
 
-	if (unit_get_aim_assist_parameters(aiming_unit_index, unit_get_zoom_level(aiming_unit_index), &parameters))
+	assisted= unit_get_aim_assist_parameters(aiming_unit_index, unit_get_zoom_level(aiming_unit_index), &parameters);
+	/* port: an MCC third-person weapon (mcc_camera.c) fires from the head but
+	aims with its third-person camera's crosshair: its shots always converge on
+	the crosshair's point, with aim assist or without, past the cone */
+	third_person= mcc_camera_weapon_following(player->unit_index);
+	if (assisted || third_person)
 	{
 		real_point3d camera_position;
 		real_vector3d camera_direction;
@@ -575,7 +583,7 @@ long player_aim_projectile(
 		{
 			struct aim_assist_target target;
 
-			if (aim_assist(&parameters, &camera_position, &camera_direction, player->unit_index, player->team_index, &target))
+			if (assisted && aim_assist(&parameters, &camera_position, &camera_direction, player->unit_index, player->team_index, &target))
 			{
 				vector_from_points3d(position, &target.position, &target_direction);
 				if (normalize3d(&target_direction)==0.f)
@@ -620,8 +628,15 @@ long player_aim_projectile(
 			real_vector3d desired_direction;
 
 			fast_normals_interpolate(&collision_direction, &target_direction, autoaim_level, &desired_direction);
-			pin_normal_to_cone3d(&desired_direction, direction, sine(parameters.deviation_angle),
-				cosine(parameters.deviation_angle), direction);
+			if (third_person)
+			{
+				*direction= desired_direction;
+			}
+			else
+			{
+				pin_normal_to_cone3d(&desired_direction, direction, sine(parameters.deviation_angle),
+					cosine(parameters.deviation_angle), direction);
+			}
 		}
 	}
 

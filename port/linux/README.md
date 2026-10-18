@@ -337,6 +337,7 @@ the setting for one start of the game. It has priority over the file.
 | `display.interpolation` | `true` | `HALO_INTERPOLATION` | `true`: one frame for each refresh of the display. `false`: 30 frames each second, as on the Xbox. Refer to "Frame rate". |
 | `display.direct_camera` | `true` | `HALO_DIRECT_CAMERA` | `true`: in first person, on foot, the view points where the player aims in each frame, not where the last tick left it. Refer to "Frame rate". |
 | `display.fov` | `0.0` | `HALO_FOV` | The first-person view's field of view on foot, in degrees across at 16:9, from 20 to 150. `0`: the stock view. Refer to "Field of view". |
+| `display.third_person_fov` | `0.0` | `HALO_THIRD_PERSON_FOV` | The third-person camera's field of view (vehicles, and MCC weapons held in third person), in degrees across at 16:9, from 20 to 150. `0`: the stock view. A weapon's zoom narrows it. |
 | `display.viewmodel_fov` | `0.0` | `HALO_VIEWMODEL_FOV` | The first-person weapon's and hands' field of view, in degrees across at 16:9, from 20 to 150. `0`: the weapon's stock view, also when `display.fov` widens the world. Refer to "Field of view". |
 | `display.viewmodel_visible` | `true` | `HALO_VIEWMODEL_VISIBLE` | `true`: the first-person weapon, hands and what is attached to them are drawn. `false`: they are not; firing, animation, sound and lights go on, and other players' models are drawn. |
 | `display.viewmodel_shield` | `false` | `HALO_VIEWMODEL_SHIELD` | `true`: the energy shield's flare (its hits, its charging, its fall) is drawn on the first-person arms too, as on the body, with the unit's own shield shader, kept closer to the arms than to the body. The stock game draws it on the body only. |
@@ -508,6 +509,10 @@ keeps the stock view. `config.toml` takes any angle from 20 to 150.
   angle up and down, as the stock view does.
 - The field of view applies on foot in first person only. Vehicles, death,
   cinematics and scripted cameras keep their own view.
+- THIRD PERSON FOV (`display.third_person_fov`) is the third-person
+  camera's: in vehicles, and with an MCC weapon held in third person. Such
+  a weapon zooms from the third-person camera, and its zoom levels keep
+  their stock view as a scope's do.
 - A scope's zoom levels keep their stock view: the extra width fades out as
   the zoom comes in. A view narrower than the stock one narrows the zoom
   too.

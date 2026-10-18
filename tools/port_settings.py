@@ -224,6 +224,8 @@ SCREENS["video_settings/fov_viewmodels"] = {
     "rows": [
         ("FOV:", "display.fov", [("DEFAULT", "0")] + [(str(n), str(n)) for n in range(80, 151, 5)],
          "On foot, horizontal at 16:9, in degrees.\nDefault keeps the stock view.", None),
+        ("THIRD PERSON FOV:", "display.third_person_fov", [("DEFAULT", "0")] + [(str(n), str(n)) for n in range(80, 151, 5)],
+         "Vehicles and third-person weapons, horizontal\nat 16:9. Default keeps the stock view.", None),
         ("VIEWMODEL FOV:", "display.viewmodel_fov", [("DEFAULT", "0")] + [(str(n), str(n)) for n in range(80, 151, 5)],
          "The weapon and hands, horizontal at 16:9.\nDefault keeps the weapon's stock view.", None),
         ("VIEWMODELS:", "display.viewmodel_visible", ON_OFF,
