@@ -430,7 +430,7 @@ static boolean model_geometry_part_check(
 		tag_validate_correct(validation, "has %ld vertices of %ld bytes outside the tags: none",
 			vertex_buffer->count, vertex_size);
 	}
-	else if (triangle_buffer->count < 0 || triangle_buffer->count > MAXIMUM_TRIANGLES_PER_MODEL_GEOMETRY_PART ||
+	else if (triangle_buffer->count < 0 || triangle_buffer->count > 0xFFFFFF ||
 		!tag_validate_contains(validation, indices, (unsigned long)(index_count * sizeof(word))))
 	{
 		tag_validate_correct(validation, "has %ld triangles, %ld indices outside the tags: none",
