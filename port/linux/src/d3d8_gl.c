@@ -812,7 +812,18 @@ static struct
 	const char *skip_vertex_shaders;
 	const char *dump_shaders;
 	BOOL statistics;
+	/* debug.gpu_sync_writes: ES uploads with glBufferSubData, never through
+	an unsynchronized mapping (host_gl_buffer_write) */
+	BOOL sync_writes;
+	/* debug.gpu_range_draws: ES indexed draws give GL their index range */
+	BOOL range_draws;
 } debug_settings;
+
+#ifdef HALO_GLES
+/* glDrawRangeElementsBaseVertex under the name the context has it, with
+glDrawElementsBaseVertex's (gl_capabilities_initialize); NULL without */
+static __typeof__(halo_glDrawRangeElementsBaseVertex) draw_range_base_vertex;
+#endif
 
 /* ---------- GL state cache
 
@@ -1894,6 +1905,14 @@ static void gl_initialize(void)
 		xgpu_capabilities.color_buffer_half_float = es32 ||
 			host_gl_has_extension("GL_EXT_color_buffer_half_float") ||
 			host_gl_has_extension("GL_EXT_color_buffer_float");
+		if (!xgpu_capabilities.base_vertex)
+			draw_range_base_vertex = NULL;
+		else if (!strcmp(base_vertex_source, "GL_EXT_draw_elements_base_vertex"))
+			draw_range_base_vertex = halo_glDrawRangeElementsBaseVertexEXT;
+		else if (!strcmp(base_vertex_source, "GL_OES_draw_elements_base_vertex"))
+			draw_range_base_vertex = halo_glDrawRangeElementsBaseVertexOES;
+		else
+			draw_range_base_vertex = halo_glDrawRangeElementsBaseVertex;
 		xgpu_capabilities.shading_language = major > 3 || (major == 3 && minor >= 1) ? "310 es" : "300 es";
 		if (major > 3 || (major == 3 && minor >= 1))
 		{
@@ -2002,6 +2021,9 @@ static void gl_initialize(void)
 	debug_settings.dump_shaders = *config_string("debug.gpu_dump_shaders") ?
 		config_string("debug.gpu_dump_shaders") : NULL;
 	debug_settings.statistics = config_boolean("debug.gpu_stats");
+	debug_settings.sync_writes = config_boolean("debug.gpu_sync_writes");
+	debug_settings.range_draws = config_boolean("debug.gpu_range_draws");
+	nv2a_vsh_strict_position = config_boolean("debug.gpu_strict_position");
 	{
 		GLint renderbuffer_size = 0;
 
@@ -4795,7 +4817,7 @@ static BOOL mirror_refresh(unsigned long first, unsigned long last)
 		the GPU's timeline, over what was written into it meanwhile (a level
 		loaded after another drew some of the earlier level's vertices).
 		The GPU is done with a frame's work STREAM_BUFFER_RING frames on */
-		if (unused && device.frame - mirror.subdata_frame[segment] >= STREAM_BUFFER_RING)
+		if (unused && !debug_settings.sync_writes && device.frame - mirror.subdata_frame[segment] >= STREAM_BUFFER_RING)
 		{
 			host_gl_buffer_write(GL_COPY_WRITE_BUFFER,
 				(unsigned int)(address - PLATFORM_CONTIGUOUS_BASE - segment * MIRROR_SEGMENT_SIZE),
@@ -5043,7 +5065,10 @@ static unsigned long stream_upload(const void *data, unsigned long size)
 	offset = device.stream_offset;
 	state_array_buffer(device.stream_buffer);
 #ifdef HALO_GLES
-	host_gl_buffer_write(GL_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
+	if (debug_settings.sync_writes)
+		glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)offset, (GLsizeiptr)length, data);
+	else
+		host_gl_buffer_write(GL_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
 #else
 	buffer_upload(GL_ARRAY_BUFFER, offset, length, data);
 #endif
@@ -5124,7 +5149,10 @@ static unsigned long index_upload(const void *data, unsigned long size)
 #endif
 	offset = device.index_offset;
 #ifdef HALO_GLES
-	host_gl_buffer_write(GL_ELEMENT_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
+	if (debug_settings.sync_writes)
+		glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, (GLintptr)offset, (GLsizeiptr)length, data);
+	else
+		host_gl_buffer_write(GL_ELEMENT_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
 #else
 	buffer_upload(GL_ELEMENT_ARRAY_BUFFER, offset, length, data);
 #endif
@@ -5810,6 +5838,12 @@ void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT 
 	{
 		/* the attributes start at vertex minimum */
 		state_element_array_buffer(index_buffer);
+#ifdef HALO_GLES
+		if (debug_settings.range_draws && draw_range_base_vertex)
+			draw_range_base_vertex(primitive_mode(primitive_type), (GLuint)minimum, (GLuint)maximum,
+				(GLsizei)vertex_count, GL_UNSIGNED_SHORT, (const void *)index_offset, -(GLint)minimum);
+		else
+#endif
 		glDrawElementsBaseVertex(primitive_mode(primitive_type), (GLsizei)vertex_count, GL_UNSIGNED_SHORT,
 			(const void *)index_offset, -(GLint)minimum);
 		return;
@@ -5829,16 +5863,27 @@ void WINAPI D3DDevice_DrawIndexedVertices(D3DPRIMITIVETYPE primitive_type, UINT 
 
 		for (index = 0; index < count; index++)
 			rebased[index] = (WORD)(source[index] - minimum);
-		glDrawElements(primitive_mode(primitive_type), (GLsizei)count, GL_UNSIGNED_SHORT,
-			(const void *)index_upload(rebased, count * sizeof(WORD)));
+		index_offset = index_upload(rebased, count * sizeof(WORD));
+		if (debug_settings.range_draws && halo_glDrawRangeElements)
+			halo_glDrawRangeElements(primitive_mode(primitive_type), 0, (GLuint)(maximum - minimum), (GLsizei)count,
+				GL_UNSIGNED_SHORT, (const void *)index_offset);
+		else
+			glDrawElements(primitive_mode(primitive_type), (GLsizei)count, GL_UNSIGNED_SHORT, (const void *)index_offset);
 		free(rebased);
 		free(indices);
 		return;
 	}
 #endif
 	(void)index;
+	index_offset = index_upload(source, count * sizeof(WORD));
+#ifdef HALO_GLES
+	if (debug_settings.range_draws && draw_range_base_vertex)
+		draw_range_base_vertex(primitive_mode(primitive_type), (GLuint)minimum, (GLuint)maximum, (GLsizei)count,
+			GL_UNSIGNED_SHORT, (const void *)index_offset, -(GLint)minimum);
+	else
+#endif
 	glDrawElementsBaseVertex(primitive_mode(primitive_type), (GLsizei)count, GL_UNSIGNED_SHORT,
-		(const void *)index_upload(source, count * sizeof(WORD)), -(GLint)minimum);
+		(const void *)index_offset, -(GLint)minimum);
 	free(indices);
 }
 

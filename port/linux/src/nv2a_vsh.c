@@ -386,6 +386,8 @@ static const char shader_prologue[] =
 	"	return vec4(1.0, max(s.x, 0.0), specular, 1.0);\n"
 	"}\n";
 
+int nv2a_vsh_strict_position;
+
 char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instruction_count,
 	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting)
 {
@@ -573,7 +575,18 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		and the clipper takes the triangle; put it behind the camera instead,
 		which the clipper also takes. */
 		"\tif (!(abs(position.w) > 0.0))\n"
-		"\t\tposition = vec4(0.0, 0.0, 0.0, -1.0);\n"
+		"\t\tposition = vec4(0.0, 0.0, 0.0, -1.0);\n",
+		XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 37);
+	/* debug.gpu_strict_position: a coordinate that is infinite or not a
+	number (tested by its bits, which a compiler cannot fold away as it may
+	isnan) also goes behind the camera, and beyond the far plane, so a
+	triangle with such a vertex is clipped to a sliver, not a wedge */
+	if (nv2a_vsh_strict_position)
+		xgpu_text_append(&text,
+			"\tif (any(equal(floatBitsToUint(position) & uvec4(0x7f800000u), uvec4(0x7f800000u))) ||\n"
+			"\t\tposition.w == -1.0 && position.xyz == vec3(0.0))\n"
+			"\t\tposition = vec4(0.0, 0.0, 1.0e4, -1.0);\n");
+	xgpu_text_append(&text,
 		"\tgl_Position = position;\n"
 #ifdef HALO_GLES
 		/* what glClipControl(GL_UPPER_LEFT, GL_ZERO_TO_ONE) does on desktop
@@ -591,9 +604,7 @@ char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instru
 		"\txT2 = oT2;\n"
 		"\txT3 = oT3;\n"
 		"\txFog = oFog.x;\n"
-		"}\n",
-		XGPU_VERTEX_CONSTANT_BIAS - 38, XGPU_VERTEX_CONSTANT_BIAS - 37
-		);
+		"}\n");
 	return text.buffer;
 }
 

@@ -142,7 +142,11 @@ context has the extension, never required (gl_functions.c). On ES 3.0 and
 3.1 these stand in for glDrawElementsBaseVertex */
 #define GL_OPTIONAL_FUNCTIONS(X) \
 	X(glDrawElementsBaseVertexEXT) \
-	X(glDrawElementsBaseVertexOES)
+	X(glDrawElementsBaseVertexOES) \
+	X(glDrawRangeElements) \
+	X(glDrawRangeElementsBaseVertex) \
+	X(glDrawRangeElementsBaseVertexEXT) \
+	X(glDrawRangeElementsBaseVertexOES)
 /* ANDROID_GL_FUNCTIONS_END */
 #else
 #define GL_FUNCTIONS(X) \
