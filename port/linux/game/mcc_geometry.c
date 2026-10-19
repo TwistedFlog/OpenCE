@@ -33,7 +33,7 @@ struct mcc_geometry_buffer {
     uint32_t bytes;
     void *allocation;
     uint32_t allocation_bytes;
-    int is_index, is_bsp;
+    int is_index, is_bsp, is_shared;
     unsigned char palette[22];
     unsigned char palette_count;
 };
@@ -43,9 +43,23 @@ struct mcc_converted_model {
     void *address;
 };
 
+/* A converted part's source streams. Parts with the same ones (MCC models
+ * repeat a body across their permutations: a30's 867 parts have 53 MB of
+ * vertices, 7.8 MB of them distinct) share its buffers. */
+struct mcc_shared_part {
+    struct mcc_shared_part *next;
+    uint32_t vertex_offset, count, index_offset, triangles;
+    long nodes;
+    int local;
+    unsigned char palette[22], palette_count;
+    struct mcc_render_part const *part;
+    struct mcc_geometry_buffer const *vertices, *indices;
+};
+
 struct mcc_geometry_state {
     struct mcc_geometry_buffer *buffers;
     struct mcc_converted_model *models;
+    struct mcc_shared_part *shared;
 };
 
 typedef char mcc_render_part_size_check[sizeof(struct mcc_render_part)==0x68 ? 1 : -1];
@@ -60,6 +74,10 @@ static uint32_t mg_u32(void const *p) {
 }
 static int mg_range(uint32_t offset,uint64_t length,uint32_t capacity) {
     return offset<=capacity && length<=capacity-offset;
+}
+static int mg_same(unsigned char const *a,unsigned char const *b,uint32_t bytes) {
+    while (bytes--) if (*a++!=*b++) return 0;
+    return 1;
 }
 static int mg_error(char const *text) {
     error(_error_silent,"MCC geometry: %s",text);
@@ -187,6 +205,28 @@ static int mg_model_tangents(struct model_vertex_uncompressed *vertices,
     return mg_float_vertices(vertices,count,68,14,3,9);
 }
 
+/* Only the common 32-byte material/centroid prefix is shared by the two
+ * formats. Blocks and hardware descriptors are new runtime objects. */
+static int mg_part_header(struct mcc_render_part *part,unsigned char const *wire,
+    struct model const *model,int local,unsigned char const *palette,unsigned char palette_count) {
+    uint32_t i;
+    memcpy(part,wire,0x20);
+    /* Match the engine schema's required-index correction for a missing
+     * material. MacWorld's damaged Elite torso references one past the end.
+     * Keep the geometry; the caller reports the visible fallback. */
+    if (mg_u16(wire+4)!=0xFFFFu && mg_u16(wire+4)>=(uint32_t)model->shaders.count)
+        part->shader=0;
+    part->flags&=~2u;
+    if (local) {
+        for (i=0;i<2;i++) {
+            short node=part->centroid_nodes[i];
+            if (node!=-1 && (node<0 || node>=palette_count)) return 0;
+            if (node!=-1) part->centroid_nodes[i]=palette[node];
+        }
+    }
+    return 1;
+}
+
 static int mg_part(struct mcc_runtime *r,struct model const *model,unsigned char const *wire,
     uint32_t part_index,uint32_t part_count,struct mcc_render_part *part) {
     uint32_t count=mg_u32(wire+0x58), triangles=mg_u32(wire+0x48);
@@ -197,7 +237,9 @@ static int mg_part(struct mcc_runtime *r,struct model const *model,unsigned char
     unsigned short *indices=NULL;
     unsigned char palette[22],palette_count=0;
     int local=(model->flags&2)!=0, many=model->nodes.count>=RASTERIZER_MAXIMUM_NODES_PER_MODEL;
-    struct mcc_geometry_buffer *record;
+    struct mcc_geometry_buffer *record,*index_record;
+    struct mcc_geometry_state *state=r->geometry;
+    struct mcc_shared_part *shared;
     (void)part_index;
     memset(part,0,sizeof(*part));
     if (!count || count>65535 || !triangles || triangles>0xFFFFFFu || mg_u16(wire+0x44)!=1 ||
@@ -217,6 +259,27 @@ static int mg_part(struct mcc_runtime *r,struct model const *model,unsigned char
         memcpy(palette,wire+0x6C,palette_count);
         for (i=0;i<palette_count;i++) if (palette[i]>=model->nodes.count)
             return mg_error("model node palette references a missing node");
+    }
+    for (shared=state->shared;shared;shared=shared->next)
+        if (shared->vertex_offset==vertex_offset && shared->count==count && shared->index_offset==index_offset &&
+            shared->triangles==triangles && shared->nodes==model->nodes.count && shared->local==local &&
+            (!local || (shared->palette_count==palette_count && mg_same(shared->palette,palette,palette_count))))
+            break;
+    if (shared) {
+        if (!mg_part_header(part,wire,model,local,palette,palette_count)) goto fail;
+        part->vertices=shared->part->vertices;
+        part->indices=shared->part->indices;
+        /* (records of their own, which release nothing, for the lookups by
+         * descriptor: the validator's and the node palette's) */
+        record=mg_record(r,&part->vertices,shared->vertices->payload,shared->vertices->bytes,NULL,0,0,0);
+        if (!record) goto fail;
+        record->is_shared=1;
+        index_record=mg_record(r,&part->indices,shared->indices->payload,shared->indices->bytes,NULL,0,1,0);
+        if (!index_record) goto fail;
+        index_record->is_shared=1;
+        memcpy(record->palette,shared->vertices->palette,sizeof(record->palette));
+        record->palette_count=shared->vertices->palette_count;
+        return 1;
     }
     vertices=malloc(raw_bytes); compressed=malloc(vertex_bytes); indices=malloc(index_bytes);
     if (!vertices || !compressed || !indices) goto fail;
@@ -238,22 +301,7 @@ static int mg_part(struct mcc_runtime *r,struct model const *model,unsigned char
         }
     }
     for (i=0;i<triangles+2;i++) if (indices[i]>=count) goto fail;
-    /* Only the common 32-byte material/centroid prefix is shared by the two
-     * formats. Blocks and hardware descriptors are new runtime objects. */
-    memcpy(part,wire,0x20);
-    /* Match the engine schema's required-index correction for a missing
-     * material. MacWorld's damaged Elite torso references one past the end.
-     * Keep the geometry; the caller reports the visible fallback. */
-    if (mg_u16(wire+4)!=0xFFFFu && mg_u16(wire+4)>=(uint32_t)model->shaders.count)
-        part->shader=0;
-    part->flags&=~2u;
-    if (local) {
-        for (i=0;i<2;i++) {
-            short node=part->centroid_nodes[i];
-            if (node!=-1 && (node<0 || node>=palette_count)) goto fail;
-            if (node!=-1) part->centroid_nodes[i]=palette[node];
-        }
-    }
+    if (!mg_part_header(part,wire,model,local,palette,palette_count)) goto fail;
     rasterizer_geometry_compress_vertices(_rasterizer_vertex_type_model_uncompressed,
         (long)count,compressed,(long)vertex_bytes,vertices,(long)raw_bytes);
     free(vertices); vertices=NULL;
@@ -263,6 +311,18 @@ static int mg_part(struct mcc_runtime *r,struct model const *model,unsigned char
     if (!record) goto fail;
     if (many) { memcpy(record->palette,palette,palette_count); record->palette_count=palette_count; }
     if (!mg_indices(r,&part->indices,triangles,indices,index_bytes)) { indices=NULL; goto fail; }
+    shared=malloc(sizeof(*shared));
+    if (shared) {
+        memset(shared,0,sizeof(*shared));
+        shared->vertex_offset=vertex_offset; shared->count=count;
+        shared->index_offset=index_offset; shared->triangles=triangles;
+        shared->nodes=model->nodes.count; shared->local=local;
+        if (local) { memcpy(shared->palette,palette,palette_count); shared->palette_count=palette_count; }
+        shared->part=part; shared->vertices=record;
+        /* (mg_indices' record, the newest) */
+        shared->indices=state->buffers;
+        shared->next=state->shared; state->shared=shared;
+    }
     return 1;
 fail:
     if (vertices) free(vertices);
@@ -422,6 +482,7 @@ fail:
 }
 
 static void mg_release(struct mcc_geometry_buffer *b) {
+    if (b->is_shared) { free(b); return; }
     if (b->is_index) rasterizer_triangle_buffer_delete((struct triangle_buffer *)b->descriptor);
     else rasterizer_vertex_buffer_delete((struct vertex_buffer *)b->descriptor);
     if (b->allocation) free(b->allocation);
@@ -450,6 +511,10 @@ void mcc_geometry_dispose(struct mcc_runtime *r) {
     while (state->models) {
         struct mcc_converted_model *m=state->models;
         state->models=m->next; free(m);
+    }
+    while (state->shared) {
+        struct mcc_shared_part *p=state->shared;
+        state->shared=p->next; free(p);
     }
     free(state); r->geometry=NULL;
 }
