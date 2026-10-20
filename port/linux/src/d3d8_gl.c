@@ -675,7 +675,7 @@ struct gl_device
 	unsigned long stream_offset;
 	GLuint index_buffer;
 	unsigned long index_offset;
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 	/* (web_chunk_get) the room in the stream and index buffers, the draws
 	made so far, and the count at each buffer's latest write */
 	unsigned long stream_capacity;
@@ -823,7 +823,18 @@ static struct
 	/* debug.gpu_upload_alignment: the room each streamed upload takes is
 	rounded up to this (a power of two, 16 by default) */
 	unsigned long upload_alignment;
+	/* debug.gpu_stream_chunks: Android takes each draw's uploads into a
+	pooled buffer that no queued draw reads, written with glBufferSubData
+	(web_chunk_get, which the web build always uses) */
+	BOOL stream_chunks;
 } debug_settings;
+
+/* whether streamed uploads go into pooled per-draw buffers (web_chunk_get) */
+#ifdef HALO_WEB
+#define STREAM_CHUNKS TRUE
+#else
+#define STREAM_CHUNKS debug_settings.stream_chunks
+#endif
 
 /* the room an upload of size bytes takes in the stream or index buffer */
 static unsigned long upload_room(unsigned long size)
@@ -2038,6 +2049,9 @@ static void gl_initialize(void)
 	debug_settings.sync_writes = config_boolean("debug.gpu_sync_writes");
 	debug_settings.range_draws = config_boolean("debug.gpu_range_draws");
 	debug_settings.frame_orphan = config_boolean("debug.gpu_frame_orphan");
+#if defined(HALO_GLES) && !defined(HALO_WEB)
+	debug_settings.stream_chunks = config_boolean("debug.gpu_stream_chunks");
+#endif
 	{
 		long alignment = config_integer("debug.gpu_upload_alignment");
 
@@ -4377,7 +4391,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 		stats.immediate_draws++;
 	else
 		stats.draws++;
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 	device.draw_serial++;
 #endif
 	draw_flush();
@@ -4965,7 +4979,7 @@ static void index_extent(const WORD *indices, unsigned long count, unsigned long
 
 /* ---------- vertex data */
 
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 /* port: WebGL on Metal (Chrome's and Safari's ANGLE) waits for the GPU to
 finish everything queued before it writes a buffer that a queued draw reads
 (without its shadow buffers, which Chrome leaves off): a glBufferSubData
@@ -4974,7 +4988,9 @@ some 2000 a frame, the frame rate a few frames each second. So each draw's
 uploads go into a buffer of their own that no queued draw reads, taken from
 pools of a few sizes, one set for each frame of the ring: a buffer is
 written again only STREAM_BUFFER_RING frames on, when the GPU is done with
-it. */
+it. Android uses the same pools under debug.gpu_stream_chunks: Snapdragon
+drew some vertices wrong when they were written (unsynchronized) into a
+buffer that draws earlier in the frame read. */
 #define WEB_CHUNK_SHIFT 12 /* 4 KB */
 #define WEB_CHUNK_CLASSES 14 /* to 32 MB */
 
@@ -5046,15 +5062,20 @@ between two of them would leave the attributes already pointed at the
 buffer reading its new, empty storage. */
 static void stream_reserve(unsigned long size)
 {
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 	/* (a new buffer when a draw since the latest write may read this one) */
-	if (size && (device.stream_offset + size > device.stream_capacity ||
-		(device.stream_offset && device.stream_serial != device.draw_serial)))
+	if (STREAM_CHUNKS)
 	{
-		device.stream_buffer = web_chunk_get(0, size, &device.stream_capacity);
-		device.stream_offset = 0;
+		if (size && (device.stream_offset + size > device.stream_capacity ||
+			(device.stream_offset && device.stream_serial != device.draw_serial)))
+		{
+			device.stream_buffer = web_chunk_get(0, size, &device.stream_capacity);
+			device.stream_offset = 0;
+		}
+		return;
 	}
-#else
+#endif
+#ifndef HALO_WEB
 	if (device.stream_offset + size > STREAM_BUFFER_SIZE)
 	{
 		/* orphan the buffer and start again */
@@ -5071,7 +5092,9 @@ static unsigned long stream_upload(const void *data, unsigned long size);
 /* stream_upload, at a multiple of alignment into the buffer */
 static unsigned long stream_upload_aligned(const void *data, unsigned long size, unsigned long alignment)
 {
-	stream_reserve(upload_room(size) + alignment);
+	/* (room for the padding to alignment, and for the end's to the upload
+	alignment: stream_upload rounds the offset after it) */
+	stream_reserve(upload_room(size) + alignment + debug_settings.upload_alignment);
 	device.stream_offset += (alignment - device.stream_offset % alignment) % alignment;
 	return stream_upload(data, size);
 }
@@ -5088,17 +5111,21 @@ static unsigned long stream_upload(const void *data, unsigned long size)
 	offset = device.stream_offset;
 	state_array_buffer(device.stream_buffer);
 #ifdef HALO_GLES
-	if (debug_settings.sync_writes)
+	/* (Android's chunks with glBufferSubData; the web build keeps its own
+	writes for them) */
+	if (debug_settings.sync_writes || debug_settings.stream_chunks)
 		glBufferSubData(GL_ARRAY_BUFFER, (GLintptr)offset, (GLsizeiptr)length, data);
 	else
 		host_gl_buffer_write(GL_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
 #else
 	buffer_upload(GL_ARRAY_BUFFER, offset, length, data);
 #endif
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 	device.stream_serial = device.draw_serial;
 #endif
-	device.stream_offset += size;
+	/* (the next upload starts on the upload alignment, also after one that
+	stream_upload_aligned moved off it) */
+	device.stream_offset = upload_room(offset + length);
 	return offset;
 }
 
@@ -5153,33 +5180,38 @@ static unsigned long index_upload(const void *data, unsigned long size)
 	unsigned long length = size;
 
 	size = upload_room(size);
-#ifdef HALO_WEB
-	/* (as stream_reserve) */
-	if (device.index_offset + size > device.index_capacity ||
-		(device.index_offset && device.index_serial != device.draw_serial))
+#ifdef HALO_GLES
+	if (STREAM_CHUNKS)
 	{
-		device.index_buffer = web_chunk_get(1, size, &device.index_capacity);
-		device.index_offset = 0;
+		/* (as stream_reserve) */
+		if (device.index_offset + size > device.index_capacity ||
+			(device.index_offset && device.index_serial != device.draw_serial))
+		{
+			device.index_buffer = web_chunk_get(1, size, &device.index_capacity);
+			device.index_offset = 0;
+		}
+		state_element_array_buffer(device.index_buffer);
 	}
-	state_element_array_buffer(device.index_buffer);
-#else
-	state_element_array_buffer(device.index_buffer);
-	if (device.index_offset + size > INDEX_BUFFER_SIZE)
-	{
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
-		device.index_offset = 0;
-	}
+	else
 #endif
+	{
+		state_element_array_buffer(device.index_buffer);
+		if (device.index_offset + size > INDEX_BUFFER_SIZE)
+		{
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
+			device.index_offset = 0;
+		}
+	}
 	offset = device.index_offset;
 #ifdef HALO_GLES
-	if (debug_settings.sync_writes)
+	if (debug_settings.sync_writes || debug_settings.stream_chunks)
 		glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, (GLintptr)offset, (GLsizeiptr)length, data);
 	else
 		host_gl_buffer_write(GL_ELEMENT_ARRAY_BUFFER, (unsigned int)offset, (unsigned int)length, data);
 #else
 	buffer_upload(GL_ELEMENT_ARRAY_BUFFER, offset, length, data);
 #endif
-#ifdef HALO_WEB
+#ifdef HALO_GLES
 	device.index_serial = device.draw_serial;
 #endif
 	device.index_offset += size;
@@ -6883,9 +6915,8 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
 		}
 #endif
-#ifdef HALO_WEB
-		web_chunks_begin_frame();
-#endif
+		if (STREAM_CHUNKS)
+			web_chunks_begin_frame();
 #else
 		device.stream_offset = STREAM_BUFFER_SIZE; /* orphan next frame */
 		device.index_offset = INDEX_BUFFER_SIZE;
