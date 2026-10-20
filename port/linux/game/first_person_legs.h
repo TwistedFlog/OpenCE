@@ -15,4 +15,13 @@ real_matrix4x3 const *first_person_legs_node_matrices(short local_player_index, 
 tag indices are another map's) */
 void first_person_legs_reset(void);
 
+/* Dedicated draw flag, after the four established render_model flags. */
+#define FIRST_PERSON_LEGS_RENDER_FLAG (1UL << 4)
+struct model;
+struct vertex_buffer;
+struct triangle_buffer;
+struct triangle_buffer const *first_person_legs_triangles(long object_index,
+    struct model const *model, struct vertex_buffer const *vertices,
+    struct triangle_buffer const *triangles);
+
 #endif

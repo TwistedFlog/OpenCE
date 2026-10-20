@@ -626,7 +626,8 @@ static void render_object_list(
 						&model_effect,
 						object_index,
 						object->object.forced_shader_permutation_index,
-						data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0);
+						(data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0) |
+						(legs_node_matrices ? FIRST_PERSON_LEGS_RENDER_FLAG : 0)); /* port: private lower-body geometry */
 
 					if (debug_objects)
 					{

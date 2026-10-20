@@ -75,6 +75,14 @@ static struct { struct { real_point3d position; real_vector3d forward, up; real 
 /* the vertical angle of a view this many degrees across at 16:9 */
 static real vertical_of(double degrees) { return (real)(2.0 * atan(tan(degrees * 3.14159265358979323846 / 360.0) * (9.0 / 16.0))); }
 static real dot_product3d(real_vector3d const *a, real_vector3d const *b) { return a->i * b->i + a->j * b->j + a->k * b->k; }
+#define REAL_MAX 3.402823466e+38F
+static int geometry_ready = 1, geometry_resets;
+static boolean first_person_legs_geometry_prepare(long definition, struct model const *model, boolean const *upper, boolean const *lower)
+{ (void)definition; (void)model; (void)upper; (void)lower; return geometry_ready; }
+static real first_person_legs_geometry_setback(long definition, real_matrix4x3 const *nodes, real_point3d const *pivot,
+    real cosine, real sine, real_vector3d const *view, real_point3d const *eye, real fov, real minimum)
+{ (void)definition; (void)nodes; (void)pivot; (void)cosine; (void)sine; (void)view; (void)eye; (void)fov; return minimum; }
+static void first_person_legs_geometry_reset(void) { geometry_resets++; }
 #include "under_test.inc"
 
 /* 0 frame; 1 pelvis; 2 spine, 3 spine1, 4 head, 9 clavicle; 5 l thigh, 6 l calf; 7 r thigh, 8 r calf; 10 a node
@@ -135,29 +143,37 @@ int main(int argc, char **argv)
 	real const back = -FIRST_PERSON_LEGS_SET_BACK;
 	world();
 	CASE("off") {
+		int before;
+		CHECK(first_person_legs_node_matrices(0, 0), "enable before disabling");
+		before = geometry_resets;
 		setting = 0;
 		CHECK(!first_person_legs_node_matrices(0, 0), "off, the body is not drawn in its own view");
+		CHECK(geometry_resets == before + 1, "disable releases private geometry");
+		setting = 1;
+		CHECK(first_person_legs_node_matrices(0, 0), "enable rebuilds the pose");
 	}
 	CASE("legs") {
-		real_matrix4x3 const *pose = first_person_legs_node_matrices(0, 0);
-		real_matrix4x3 lid = node_matrices[0][PELVIS];
-		short i;
-		/* (part of the way from the pelvis's joint to the spine's) */
-		lid.position.x += (node_matrices[0][SPINE].position.x - lid.position.x) * FIRST_PERSON_LEGS_LID;
-		lid.position.z += (node_matrices[0][SPINE].position.z - lid.position.z) * FIRST_PERSON_LEGS_LID;
-		CHECK(FIRST_PERSON_LEGS_LID > 0 && FIRST_PERSON_LEGS_LID < 1, "the lid between the two joints");
-		CHECK(pose != NULL, "the player's own biped, on foot");
-		for (i = 0; i < NODES; i++) {
-			if (i == FRAME || i == PELVIS || i == L_THIGH || i == L_CALF || i == R_THIGH || i == R_CALF) {
-				CHECK(same_place(&pose[i], &node_matrices[0][i], back), "node %d kept, set back", i);
-				CHECK(pose[i].scale == 1, "node %d at its own scale", i);
-			} else {
-				CHECK(same_place(&pose[i], &lid, back), "node %d onto the waist's lid", i);
-				CHECK(pose[i].scale > 0 && pose[i].scale <= 0.001f, "node %d shrunk, not to nothing", i);
-			}
-		}
-		CHECK(logs == 0, "nothing logged");
-	}
+        real_matrix4x3 const *pose = first_person_legs_node_matrices(0, 0);
+        short i;
+        CHECK(pose != NULL, "the player's own biped on foot");
+        for (i = 0; i < NODES; i++) {
+            CHECK(same_place(&pose[i], &node_matrices[0][i], back), "node %d has its original position", i);
+            CHECK(pose[i].scale == node_matrices[0][i].scale, "node %d keeps its scale", i);
+        }
+        CHECK(!first_person_legs_models[0].omitted[SPINE] && first_person_legs_models[0].omitted[HEAD],
+            "retain the torso, omit the head");
+        CHECK(first_person_legs_models[0].lower[L_THIGH] && !first_person_legs_models[0].lower[PELVIS] &&
+            !first_person_legs_models[0].lower[SPINE], "surface clearance distinguishes legs from torso");
+    }
+    CASE("geometry-failure") {
+        geometry_ready = 0;
+        CHECK(!first_person_legs_node_matrices(0, 0), "unsafe/incomplete geometry hides the optional body");
+    }
+    CASE("geometry-reset") {
+        int before = geometry_resets;
+        first_person_legs_reset();
+        CHECK(geometry_resets == before + 1, "map reset releases the private geometry");
+    }
 	CASE("setback") {
 		real_matrix4x3 const *pose;
 		/* (looking 60 degrees down, straight down, straight up: the view's heading, level, each time) */
@@ -279,44 +295,6 @@ int main(int argc, char **argv)
 					pose[i].position.z == baseline[i].position.z &&
 					pose[i].scale == baseline[i].scale,
 					"FOV %g translates the whole pose without deforming node %d", fovs[f], i);
-			}
-		}
-	}
-	if (!strcmp(case_name, "junction") || !strcmp(case_name, "junction-crouch")) {
-		real const fovs[] = {20.f, 90.f, 110.f, 120.f, 150.f};
-		real const views[][6] = {
-			{1, 0, 0, 0, 0, 1}, {0.5f, 0, -0.8660254f, 0.8660254f, 0, 0.5f},
-			{0, 0, -1, 1, 0, 0}, {0, 0, 1, -1, 0, 0}, {0, 1, 0, 0, 0, 1}
-		};
-		short f, v, i;
-		render.camera.position.x = 0.3f;
-		render.camera.position.y = -0.2f;
-		render.camera.position.z = !strcmp(case_name, "junction-crouch") ? 1.7f : 2.7f;
-		for (f = 0; f < 5; f++) {
-			render.camera.vertical_field_of_view = vertical_of(fovs[f]);
-			for (v = 0; v < 5; v++) {
-				real_matrix4x3 const *pose;
-				render.camera.forward.i = views[v][0]; render.camera.forward.j = views[v][1];
-				render.camera.forward.k = views[v][2]; render.camera.up.i = views[v][3];
-				render.camera.up.j = views[v][4]; render.camera.up.k = views[v][5];
-				pose = first_person_legs_node_matrices(0, 0);
-				CHECK(pose != NULL, "the legs remain drawn at %g FOV", fovs[f]);
-				for (i = 0; i < NODES; i++) {
-					real_vector3d from_eye;
-					real depth, height;
-					if (i == FRAME || i == PELVIS || i == L_THIGH || i == L_CALF ||
-						i == R_THIGH || i == R_CALF)
-						continue;
-					from_eye.i = pose[i].position.x - render.camera.position.x;
-					from_eye.j = pose[i].position.y - render.camera.position.y;
-					from_eye.k = pose[i].position.z - render.camera.position.z;
-					depth = dot_product3d(&from_eye, &render.camera.forward);
-					height = dot_product3d(&from_eye, &render.camera.up);
-					CHECK(depth <= 0.f || height + depth * tan(render.camera.vertical_field_of_view * 0.5) < -0.01f,
-						"upper node %d stays below the view at FOV %g view %d (depth %g height %g)",
-						i, fovs[f], v, depth, height);
-				}
-				CHECK(memcmp(node_matrices, tick_nodes, sizeof(tick_nodes)) == 0, "world pose is untouched");
 			}
 		}
 	}

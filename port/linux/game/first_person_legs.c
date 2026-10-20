@@ -12,17 +12,13 @@ shadow, its reflection, its hit boxes and markers are the game's as ever,
 and nothing it carries or wears (its weapons, its children, its widgets) is
 drawn with it.
 
-The legs are found from the skeleton, once per biped definition: the pelvis
-and the head are the biped's own runtime nodes (the ones its autoaim pill
-uses). The pelvis's child on the way up to the head is the spine; the nodes
-below the pelvis but not below the spine are the legs. Everything else past
-the pelvis's own ancestors is drawn shrunk to nothing
-(FIRST_PERSON_LEGS_COLLAPSE) onto a fixed point halfway from the pelvis to
-the spine. The whole copied pose is set back far enough that this closure
-stays below the view even when looking straight down. Moving the whole
-pose preserves the waist's shape; stretching just the upper bones to an
-out-of-view point leaves a visible tapered connector. The model's geometry
-is never read.
+The skeleton identifies the legs, torso, head and arms. The copied pose
+keeps every bone's original scale and animation: folding torso bones into
+the pelvis distorts the blended waist skin into a pouch. Feature-owned
+index buffers omit the head and arms while retaining the intact torso-to-
+hip surface (first_person_legs_geometry.c). The actual animated upper
+surface and cut boundaries determine clearance, so no opening enters the
+view as the player walks, crouches or changes FOV.
 
 The pose is each local player's own (split-screen views draw their own
 bodies). It is turned about the hips from the body's facing to the view's:
@@ -30,9 +26,8 @@ the game turns a standing body only once the aim is well away from it, and
 slowly, and one in the air not at all, so the legs drawn as they face would
 lag behind the view and, after a jump's turn, stand in front of it. It is
 set back along the view's level facing, by at least FIRST_PERSON_LEGS_SET_BACK.
-The clearance uses eye height and FOV, not the current look pitch, so
-the body stands still on the ground as the view turns up and down: looking
-down, it is a little behind, as though the head leaned out over it.
+The clearance uses the animated surface, eye height and FOV, not the
+current look pitch. Looking up and down alone does not slide the pose.
 */
 
 #include "cseries.h"
@@ -49,8 +44,7 @@ down, it is a little behind, as though the head leaned out over it.
 #include "units/biped_definitions.h"
 
 #include "first_person_legs.h"
-
-#include <math.h>
+#include "first_person_legs_geometry.h"
 
 enum
 {
@@ -60,17 +54,6 @@ enum
 /* how far behind the eye the body is drawn, world units (about 49 cm), along
 the view's level facing (tuned in-game) */
 #define FIRST_PERSON_LEGS_SET_BACK 0.16f
-/* the waist's closure, fixed between the pelvis and spine: changing its
-height with FOV deforms the body */
-#define FIRST_PERSON_LEGS_LID 0.5f
-/* clearance outside the bottom view plane for the shrunken skin and its
-shield effect, world units */
-#define FIRST_PERSON_LEGS_CLIP_MARGIN 0.03f
-/* the scale the upper body is drawn at on the waist: small enough that its
-skin is within a millimetre of the lid's point, not zero, which would
-leave its vertices' normals without a length to normalize */
-#define FIRST_PERSON_LEGS_COLLAPSE 0.001f
-
 /* port/linux/src/port_config.c */
 int config_boolean(const char *name);
 unsigned long config_changes(void);
@@ -85,8 +68,10 @@ struct first_person_legs_model
 	long definition_index; /* NONE: free */
 	/* the pelvis's child towards the head; NONE: no legs to draw */
 	short spine_node_index;
-	/* TRUE: a node of the upper body, drawn onto the spine's joint */
-	boolean collapsed[MAXIMUM_NODES_PER_MODEL];
+	/* TRUE: head/arm geometry omitted from the local body */
+	boolean omitted[MAXIMUM_NODES_PER_MODEL];
+	boolean lower[MAXIMUM_NODES_PER_MODEL];
+	short geometry_status; /* 0: unprepared, 1: ready, -1: unsupported */
 };
 
 static struct first_person_legs_model first_person_legs_models[FIRST_PERSON_LEGS_MODELS];
@@ -107,6 +92,8 @@ static boolean first_person_legs_enabled(
 	if (changes != config_changes())
 	{
 		changes = config_changes();
+		if (enabled && !config_boolean("display.first_person_legs"))
+			first_person_legs_reset();
 		enabled = config_boolean("display.first_person_legs") != 0;
 	}
 	return enabled;
@@ -138,7 +125,7 @@ static short first_person_legs_find(
 	short node_count,
 	short pelvis_index,
 	short head_index,
-	boolean *collapsed,
+	boolean *omitted,
 	char const **reason)
 {
 	short spine_index = NONE;
@@ -174,15 +161,18 @@ static short first_person_legs_find(
 	{
 		/* (the pelvis and the frames above it are the body's place, kept) */
 		if (first_person_legs_below(model, node_count, pelvis_index, node_index))
-			collapsed[node_index] = FALSE;
+			omitted[node_index] = FALSE;
 		else if (first_person_legs_below(model, node_count, node_index, pelvis_index) &&
 			!first_person_legs_below(model, node_count, node_index, spine_index))
 		{
-			collapsed[node_index] = FALSE;
+			omitted[node_index] = FALSE;
 			leg_count++;
 		}
+		else if (node_index != head_index &&
+			first_person_legs_below(model, node_count, head_index, node_index))
+			omitted[node_index] = FALSE;
 		else
-			collapsed[node_index] = TRUE;
+			omitted[node_index] = TRUE;
 	}
 	if (leg_count == 0)
 	{
@@ -193,7 +183,7 @@ static short first_person_legs_find(
 }
 
 /* a biped definition's legs, found once (and, when it has none, said once) */
-static struct first_person_legs_model const *first_person_legs_model_get(
+static struct first_person_legs_model *first_person_legs_model_get(
 	long definition_index,
 	struct model const *model,
 	short node_count,
@@ -214,8 +204,13 @@ static struct first_person_legs_model const *first_person_legs_model_get(
 	entry = &first_person_legs_models[first_person_legs_next_model];
 	first_person_legs_next_model = (short)((first_person_legs_next_model + 1) % FIRST_PERSON_LEGS_MODELS);
 	entry->definition_index = definition_index;
+	entry->geometry_status = 0;
 	entry->spine_node_index = first_person_legs_find(model, node_count, pelvis_index, head_index,
-		entry->collapsed, &reason);
+		entry->omitted, &reason);
+	for (index = 0; index < node_count; index++)
+		entry->lower[index] = index != pelvis_index &&
+			first_person_legs_below(model, node_count, index, pelvis_index) &&
+			!first_person_legs_below(model, node_count, index, entry->spine_node_index);
 	if (entry->spine_node_index == NONE)
 		platform_log("first-person legs: %s has %s; its legs are not drawn\n", tag_get_name(definition_index), reason);
 	return entry;
@@ -275,6 +270,7 @@ void first_person_legs_reset(
 {
 	short index;
 
+	first_person_legs_geometry_reset();
 	for (index = 0; index < FIRST_PERSON_LEGS_MODELS; index++)
 		first_person_legs_models[index].definition_index = NONE;
 	first_person_legs_next_model = 0;
@@ -288,15 +284,14 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	struct object_datum *object;
 	struct biped_definition *definition;
 	struct model *model;
-	struct first_person_legs_model const *legs;
+	struct first_person_legs_model *legs;
 	real_matrix4x3 const *nodes;
 	real_matrix4x3 *pose;
 	real_vector3d view;
 	real_vector3d body;
 	real_vector3d back;
-	real_point3d lid;
-	real set_back = FIRST_PERSON_LEGS_SET_BACK;
 	real_point3d pivot;
+	real set_back;
 	real cosine = 1.f;
 	real sine = 0.f;
 	long player_index;
@@ -330,6 +325,15 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		definition->biped.runtime_pelvis_node_index, definition->biped.runtime_head_node_index);
 	if (legs->spine_node_index == NONE)
 		return NULL;
+	if (!legs->geometry_status)
+	{
+		legs->geometry_status = first_person_legs_geometry_prepare(object->definition_index,
+			model, legs->omitted, legs->lower) ? 1 : -1;
+		if (legs->geometry_status < 0)
+			platform_log("first-person legs: %s has unsupported geometry; local body not drawn\n", tag_get_name(object->definition_index));
+	}
+	if (legs->geometry_status < 0)
+		return NULL;
 
 	nodes = object_get_node_matrices(object_index);
 	pose = first_person_legs_matrices[local_player_index];
@@ -337,7 +341,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	from its first node's, which in the game's characters is the pelvis,
 	its axis up the spine) */
 	if (!first_person_legs_view_heading(&render.camera.forward, &render.camera.up, &view))
-		view = *global_zero_vector3d;
+		return NULL;
 	else if (first_person_legs_body_heading(&object->object.forward,
 		(real_matrix4x3 const *)object_header_block_get(object_index, &object->object.node_matrices),
 		&nodes[0], &body))
@@ -351,44 +355,13 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	/* A model may have a separate root above the pelvis. Turn about the
 	drawn hips so that an offset root does not move them as the view turns. */
 	pivot = nodes[definition->biped.runtime_pelvis_node_index].position;
-	{
-		real_point3d const *spine = &nodes[legs->spine_node_index].position;
-		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;
-
-		lid.x = pelvis->x + (spine->x - pelvis->x) * FIRST_PERSON_LEGS_LID;
-		lid.y = pelvis->y + (spine->y - pelvis->y) * FIRST_PERSON_LEGS_LID;
-		lid.z = pelvis->z + (spine->z - pelvis->z) * FIRST_PERSON_LEGS_LID;
-	}
-	/* The most revealing pitch is straight down. At eye-to-waist height h,
-	the bottom edge reaches h*tan(v/2) behind the eye. Keep the closure
-	beyond it with a plane-normal margin; the default offset is a minimum.
-	Account for the drawn pose's existing offset from the camera, then apply
-	the same translation to every bone, including the pelvis and legs. */
-	{
-		real x = lid.x - pivot.x;
-		real y = lid.y - pivot.y;
-		real half_fov = render.camera.vertical_field_of_view * 0.5f;
-		real height = MAX(0.f, render.camera.position.z - lid.z);
-		real required = height * (real)tan((double)half_fov) +
-			FIRST_PERSON_LEGS_CLIP_MARGIN / (real)cos((double)half_fov);
-		real world_x = pivot.x + cosine * x - sine * y;
-		real world_y = pivot.y + sine * x + cosine * y;
-		real current = (render.camera.position.x - world_x) * view.i +
-			(render.camera.position.y - world_y) * view.j;
-
-		set_back = MAX(set_back, required - current);
-	}
-
+	set_back = first_person_legs_geometry_setback(object->definition_index, nodes, &pivot,
+		cosine, sine, &view, &render.camera.position, render.camera.vertical_field_of_view, FIRST_PERSON_LEGS_SET_BACK);
+	if (!(set_back < REAL_MAX))
+		return NULL;
 	for (index = 0; index < node_count; index++)
 	{
-		if (legs->collapsed[index])
-		{
-			pose[index] = nodes[legs->spine_node_index];
-			pose[index].scale *= FIRST_PERSON_LEGS_COLLAPSE;
-			pose[index].position = lid;
-		}
-		else
-			pose[index] = nodes[index];
+		pose[index] = nodes[index];
 		{
 			real x = pose[index].position.x - pivot.x;
 			real y = pose[index].position.y - pivot.y;
@@ -401,4 +374,23 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		first_person_legs_turn(&pose[index].up, cosine, sine);
 	}
 	return pose;
+}
+
+struct triangle_buffer const *first_person_legs_triangles(
+	long object_index, struct model const *model,
+	struct vertex_buffer const *vertices, struct triangle_buffer const *triangles)
+{
+	struct object_datum *object = object_try_and_get(object_index);
+	short index;
+
+	if (!object || !first_person_legs_enabled())
+		return NULL;
+	for (index = 0; index < FIRST_PERSON_LEGS_MODELS; index++)
+	{
+		struct first_person_legs_model const *legs = &first_person_legs_models[index];
+		if (legs->definition_index == object->definition_index && legs->geometry_status > 0)
+			return first_person_legs_geometry_get(object->definition_index, model,
+				legs->omitted, legs->lower, vertices, triangles);
+	}
+	return NULL;
 }
