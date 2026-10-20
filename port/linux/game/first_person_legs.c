@@ -360,7 +360,9 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	back.i = -view.i;
 	back.j = -view.j;
 	back.k = 0.f;
-	pivot = nodes[0].position;
+	/* A model may have a separate root above the pelvis. Turn about the
+	drawn hips so that an offset root does not move them as the view turns. */
+	pivot = nodes[definition->biped.runtime_pelvis_node_index].position;
 	{
 		real_point3d const *spine = &nodes[legs->spine_node_index].position;
 		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;

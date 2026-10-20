@@ -9,8 +9,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run
 
-CASES = ["off", "legs", "setback", "turn", "interpolated", "lidfov", "who", "unusable", "loops", "split", "reset"]
+CASES = ["off", "legs", "setback", "turn", "pivot", "interpolated", "lidfov", "who", "unusable", "loops", "split", "reset"]
 CONTROLS = {
+    # a separate root makes the hips orbit as the view turns
+    "root-pivot": (("pivot = nodes[definition->biped.runtime_pelvis_node_index].position;",
+                    "pivot = nodes[0].position;"), "pivot"),
+    # interpolation must move the pivot with the drawn pelvis, not its tick pose
+    "tick-pivot": (("pivot = nodes[definition->biped.runtime_pelvis_node_index].position;",
+                    "pivot = ((real_matrix4x3 const *)object_header_block_get(object_index, "
+                    "&object->object.node_matrices))[definition->biped.runtime_pelvis_node_index].position;"),
+                   "interpolated"),
     # the setting ignored
     "always-on": (("if (!first_person_legs_enabled() || local_player_index", "if (local_player_index"), "off"),
     # the upper body drawn as it is (nothing collapsed)

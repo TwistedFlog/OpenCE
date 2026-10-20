@@ -184,10 +184,10 @@ int main(int argc, char **argv)
 		render.camera.forward.i = 0; render.camera.forward.j = 1;
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose != NULL, "drawn");
-		CHECK(fabsf(pose[L_CALF].position.x) < 1e-5f &&
-			fabsf(pose[L_CALF].position.y - (6.f - FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f &&
+		CHECK(fabsf(pose[L_CALF].position.x - 1.f) < 1e-5f &&
+			fabsf(pose[L_CALF].position.y - (5.f - FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f &&
 			fabsf(pose[L_CALF].position.z - 6.f) < 1e-5f,
-			"a calf 6 ahead is 6 to the view's side, set back from the view (%g %g)",
+			"a calf 5 ahead of the pelvis turns about the hips, set back from the view (%g %g)",
 			pose[L_CALF].position.x, pose[L_CALF].position.y);
 		CHECK(fabsf(pose[L_CALF].forward.i) < 1e-5f && fabsf(pose[L_CALF].forward.j - 1.f) < 1e-5f,
 			"its axes turned with it");
@@ -195,8 +195,39 @@ int main(int argc, char **argv)
 		/* (a jump's half turn: the body still faces +x, the view -x) */
 		render.camera.forward.i = -1; render.camera.forward.j = 0;
 		pose = first_person_legs_node_matrices(0, 0);
-		CHECK(pose && fabsf(pose[L_CALF].position.x - (-6.f + FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f,
+		CHECK(pose && fabsf(pose[L_CALF].position.x - (-4.f + FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f,
 			"half turned, still ahead of the view, not behind it (%g)", pose ? pose[L_CALF].position.x : 0);
+	}
+	CASE("pivot") {
+		real const headings[3][2] = {{0.f, 1.f}, {-1.f, 0.f}, {0.f, -1.f}};
+		short root, turn;
+		/* Both a separate offset root and the stock layout, with the pelvis at node zero. */
+		for (root = 0; root < 2; root++) {
+			short pelvis = root ? FRAME : PELVIS;
+			world();
+			definitions[0].biped.runtime_pelvis_node_index = pelvis;
+			skeleton[SPINE].parent_node_index = pelvis;
+			skeleton[L_THIGH].parent_node_index = pelvis;
+			skeleton[R_THIGH].parent_node_index = pelvis;
+			node_matrices[0][pelvis].position.x = 0.1f;
+			node_matrices[0][pelvis].position.y = 0.2f;
+			memcpy(tick_nodes, node_matrices, sizeof(tick_nodes));
+			for (turn = 0; turn < 3; turn++) {
+				real_matrix4x3 const *pose;
+				real_point3d expected = node_matrices[0][pelvis].position;
+				render.camera.forward.i = headings[turn][0];
+				render.camera.forward.j = headings[turn][1];
+				expected.x -= headings[turn][0] * FIRST_PERSON_LEGS_SET_BACK;
+				expected.y -= headings[turn][1] * FIRST_PERSON_LEGS_SET_BACK;
+				pose = first_person_legs_node_matrices(0, 0);
+				CHECK(pose && fabsf(pose[pelvis].position.x - expected.x) < 1e-5f &&
+					fabsf(pose[pelvis].position.y - expected.y) < 1e-5f &&
+					fabsf(pose[pelvis].position.z - expected.z) < 1e-5f,
+					"pelvis %d stays anchored when the view turns %d", pelvis, turn);
+				CHECK(memcmp(node_matrices, tick_nodes, sizeof(tick_nodes)) == 0,
+					"the world pose remains unchanged");
+			}
+		}
 	}
 	CASE("interpolated") {
 		/* (between ticks the drawn pose has turned 30 degrees on from the tick's: the body's facing goes with it) */
@@ -205,14 +236,19 @@ int main(int argc, char **argv)
 		short i;
 		for (i = 0; i < NODES; i++) {
 			real x = node_matrices[0][i].position.x - 1.f, y = node_matrices[0][i].position.y;
-			node_matrices[0][i].position.x = 1.f + c * x - s * y;
-			node_matrices[0][i].position.y = s * x + c * y;
+			node_matrices[0][i].position.x = 1.3f + c * x - s * y;
+			node_matrices[0][i].position.y = 0.2f + s * x + c * y;
 			node_matrices[0][i].forward.i = c; node_matrices[0][i].forward.j = s;
 			node_matrices[0][i].left.i = -s; node_matrices[0][i].left.j = c;
 		}
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && fabsf(pose[L_CALF].forward.i - 1.f) < 1e-5f && fabsf(pose[L_CALF].forward.j) < 1e-5f,
 			"the drawn body faces the view, whatever the tick's");
+		CHECK(fabsf(pose[PELVIS].position.x - (1.3f - FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f &&
+			fabsf(pose[PELVIS].position.y - 0.2f) < 1e-5f &&
+			fabsf(pose[L_CALF].position.x - (6.3f - FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f &&
+			fabsf(pose[L_CALF].position.y - 0.2f) < 1e-5f,
+			"the interpolated pelvis anchors the turned pose, not the tick's pelvis or the root");
 	}
 	CASE("lidfov") {
 		/* (the pelvis at x 1, the spine at x 2: the lid's x is 1 and its share of the way) */
