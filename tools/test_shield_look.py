@@ -56,7 +56,7 @@ def shield_tool(tmp_path_factory):
 
 @pytest.mark.parametrize("case", ["classic", "invalid-setting", "profiles", "authored-shader", "authored-noise",
                                   "authored-function", "authored-hands", "authored-body", "authored-decal", "missing", "split",
-                                  "toggle", "outer", "reload", "capacity", "malformed-noise"])
+                                  "toggle", "outer", "arms-off", "reload", "capacity", "malformed-noise"])
 @pytest.mark.parametrize("look", ["enhanced", "enhanced2"])
 def test_shield_look(shield_tool, case, look):
     run = subprocess.run([str(shield_tool), case, look], capture_output=True, text=True, timeout=15)
@@ -97,7 +97,7 @@ def test_shared_hooks():
     source = (ROOT / "source/interface/first_person_weapons.c").read_text()
     draw = function(source, "first_person_weapon_draw")
     weapon, hands = [m.start() for m in re.finditer(r'\brender_model\(', draw)]
-    assert weapon < draw.index("if (!shield_look_arms(") < draw.index("viewmodel_shield_apply(") < hands
+    assert weapon < draw.index("viewmodel_shield_apply(") < draw.index("shield_look_arms(") < hands
     cache = (ROOT / "source/cache/cache_files.c").read_text()
     assert "shield_look_reset();" in function(cache, "scenario_tags_load")
     assert "shield_look_reset();" in function(cache, "scenario_tags_unload")
@@ -138,7 +138,10 @@ def test_approved_profile_parameters(shield_tool):
     # The approved ENHANCED 2 displacement is now the sole ENHANCED body.
     struct.pack_into("<h", body, 0x34, 2)
     struct.pack_into("<ff", body, 0x38, 0.0125, 0.5)
-    arms = tags[entries[2163][2]:entries[2163][2] + 0x14C]
+    arms = bytearray(tags[entries[2163][2]:entries[2163][2] + 0x14C])
+    # First-person displacement follows the positively identified stock tag.
+    struct.pack_into("<h", arms, 0x34, 2)
+    struct.pack_into("<ff", arms, 0x38, 0.03, 2.0)
     expected = b"".join(profile[lo:hi] for profile in (body, arms) for lo, hi in spans)
     assert bytes.fromhex(result.stdout.decode().strip()) == expected
 

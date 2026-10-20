@@ -29,7 +29,6 @@ data, conservative eligibility policy and shared-engine hooks.
 #include <string.h>
 
 const char *config_string(const char *name);
-boolean overshield_effect_arms_values(long unit_index, real const *values, real *arms);
 
 /* Plasma tag layout, shared by the validated Xbox, CE and MCC runtime
 tags. Keep the references intact: each map's own texture cache serves them. */
@@ -89,7 +88,6 @@ struct shield_look_entry
 until they are submitted, including each split-screen view. */
 static struct shield_look_entry shield_looks[SHIELD_LOOK_MAXIMUM];
 static short shield_look_count;
-static real shield_look_arm_values[MAXIMUM_LOCAL_PLAYERS][NUMBER_OF_OUTGOING_OBJECT_FUNCTIONS];
 
 static boolean shield_look_enabled(void)
 {
@@ -363,6 +361,11 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	entry->body = entry->arms = *plasma;
 	shield_look_profile(&entry->body, FALSE);
 	shield_look_profile(&entry->arms, TRUE);
+	/* Arm Shields owns displacement and its distance/FOV cap. Keep the
+	stock modifier's offset fields; only its visual profile changes. */
+	entry->arms.offset_source = plasma->offset_source;
+	entry->arms.offset_amount = plasma->offset_amount;
+	entry->arms.offset_exponent = plasma->offset_exponent;
 	/* A small normal displacement follows the visible hit intensity (B),
 	not the unused stock C function. At full intensity this is 3.8 cm;
 	the square root keeps a gentle outer layer while the hit fades. */
@@ -376,7 +379,6 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 void shield_look_reset(void)
 {
 	memset(shield_looks, 0, sizeof(shield_looks));
-	memset(shield_look_arm_values, 0, sizeof(shield_look_arm_values));
 	shield_look_count = 0;
 }
 
@@ -401,20 +403,14 @@ boolean shield_look_arms(short local_player_index, long unit_index, long hands_m
 	struct render_model_effect *effect)
 {
 	struct shield_look_entry *entry;
-	struct unit_datum *unit;
-	real *values;
 
-	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS)
+	/* The caller first applies Arm Shields. OFF leaves no pass to restyle;
+	ON retains its values pointer, including its offset cap and overshield. */
+	if (!effect->modifier_shader || local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS)
 		return FALSE;
 	entry = shield_look_for_unit(unit_index, hands_model_index);
 	if (!entry)
 		return FALSE;
-	unit = unit_get(unit_index);
-	values = shield_look_arm_values[local_player_index];
-	if (!overshield_effect_arms_values(unit_index, unit->object.outgoing_function_values, values))
-		memcpy(values, unit->object.outgoing_function_values, sizeof(shield_look_arm_values[0]));
 	effect->modifier_shader = &entry->arms.shader;
-	effect->modifier_animation.colors = unit->object.outgoing_change_colors;
-	effect->modifier_animation.values = values;
 	return TRUE;
 }

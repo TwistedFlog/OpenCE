@@ -9,11 +9,13 @@ It does not use the mod loader or change simulation, shield strength, damage,
 network messages, map tags, models or cache files. No network-version change
 is required.
 
-CLASSIC leaves the established drawing paths intact, including the separate
-Arm Shields and Overshield Effect settings. ENHANCED supplies its own arm
-profile regardless of Arm Shields and avoids applying that setting a second
-time. Overshield Effect remains an independent, opt-in visual modifier; turn
-it off when comparing against CMT's unmodified appearance.
+CLASSIC leaves the established drawing paths intact. Arm Shields is
+now authoritative for the added first-person pass in every SHIELD LOOK
+mode: OFF adds no arm shield; ON supplies the stock displacement and its
+distance/FOV-based cap. ENHANCED restyles that pass with the CMT pattern and
+colors while preserving its animation values and overshield handling.
+Authored map materials remain authoritative. Overshield Effect remains an
+independent, opt-in visual modifier.
 
 ## Reference and provenance
 
@@ -47,10 +49,11 @@ all rendering fields, allowing only the approved body displacement below:
 | Secondary scale | 14 | 62 |
 
 The original CMT profile uses source C rather than B: CMT has two object
-functions, and its unused C output is zero. ENHANCED deliberately replaces only the body's offset parameters as described
-below; the first-person parameters are retained. ENHANCED's arm values are separate
-from Arm Shields' values, so the latter's displacement cap does not alter
-the CMT profile. CMT supplies duplicate arm parts for the plasma layer: all
+functions, and its unused C output is zero. ENHANCED uses the approved body
+displacement below; first-person displacement follows the stock modifier
+and Arm Shields cap. ENHANCED retains Arm Shields' animation-values pointer,
+so its displacement cap and overshield handling apply to the enhanced
+profile. CMT supplies duplicate arm parts for the plasma layer: all
 68-byte vertices in its four shell parts (660, 574, 222 and 39 vertices)
 are byte-identical to their underlying arm parts. The feature uses the
 engine's modifier pass on the current map's hands.
@@ -62,8 +65,8 @@ replace another map's models to make their silhouettes match CMT's.
 
 ENHANCED now uses the approved former ENHANCED 2 appearance exactly. The
 body displacement is outgoing hit intensity B, exponent 0.5 and amount
-0.0125 world units (about 3.8 cm at full intensity). The CMT pattern, colors,
-animation, brightness and complete first-person shader remain unchanged.
+0.0125 world units (about 3.8 cm at full intensity). The CMT pattern, colors, animation and brightness remain unchanged.
+The first-person offset now follows Arm Shields, as described below.
 The former skin-tight body option and separate SHIELD LOOK submenu are gone.
 
 Existing `"enhanced2"` config/environment values normalize to `"enhanced"`
@@ -238,3 +241,41 @@ and web. A hidden Windows OpenGL menu run at 1280x960 confirmed the relocated
 row fits and an `enhanced2` environment value displays as ENHANCED. The shader
 parameters are identical to the approved profile tested above; gameplay and
 network runs were not repeated for this naming/menu consolidation.
+
+## Arm Shields authority and offset
+
+The approved third-person profile is unchanged. ENHANCED's first-person
+shader now retains the validated stock modifier's offset source B, amount
+0.03 and exponent 2 instead of CMT's unused C displacement. Its pattern,
+colors, intensity and noise animation still use the CMT arm profile.
+
+The existing `viewmodel_shield_apply` runs first and remains responsible for
+activation, animation values, arm distance and the renderer's FOV-dependent
+cap. `shield_look_arms` only replaces its shader on eligible stock maps,
+leaving colors and the values pointer intact. OFF leaves no pass to replace.
+The minimal `port:` hook reorder in `first_person_weapon_draw` is necessary
+because Arm Shields owns the geometry-distance information and pass setup;
+no new renderer hook or duplicate displacement calculation was introduced.
+CLASSIC and authored-map fallback retain the original implementation.
+
+Validation: 65 focused tests passed, including real Arm Shields renderer-cap
+and negative-control tests, enabled/disabled enhanced arms, exact profile
+fields and preserved values/color pointers. Windows, Android guest/host and
+web release builds passed. Runtime checks and evidence are recorded below.
+
+Hidden Windows OpenGL runs on the same bounded Beaver Creek fixture captured
+the old skin-tight ENHANCED arms, the new ENHANCED arms with Arm Shields ON,
+ENHANCED with Arm Shields OFF, and CLASSIC with Arm Shields ON at 1280x960.
+OFF showed no added first-person shield during scripted hits. The shader
+pattern remains CMT's, so apparent brightness differs from CLASSIC even
+though the offset source, amount, exponent and cap are the same. Original
+maps and saves were untouched. The first-person hook is shared by Xbox, CE
+and MCC; the unchanged conservative eligibility cases pass in the harness.
+Earlier family-specific live authority audits were not repeated for this
+pass-order change. Android/browser gameplay and live split-screen were not
+exercised; split-screen values and FOV-limit behavior have harness coverage.
+
+The final production Windows executable passed both host roles in the
+Beaver Creek two-player comparison with CLASSIC versus ENHANCED, Arm Shields
+ON for both, scripted damage/deaths and real rendering (24 seconds compared
+per run, unchanged judge/tolerances). No network protocol or version changed.

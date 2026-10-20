@@ -126,6 +126,23 @@ static void setup(void)
     bitmap.mipmap_count = 5; bitmap.pixels_size = 75008; bitmap.flags = 0x89;
 }
 
+/* Simulate the caller's Arm Shields pass; profile code must preserve its
+   shader-animation state, including the pointer used by the renderer cap. */
+static int arm_setting = 1;
+static real arm_values[4][4];
+static boolean draw_arms(short local, long unit_index, long hands, struct render_model_effect *effect)
+{
+    memset(effect, 0, sizeof(*effect));
+    if (arm_setting && local >= 0 && local < 4) {
+        if (!overshield_effect_arms_values(unit_index, unit.object.outgoing_function_values, arm_values[local]))
+            memcpy(arm_values[local], unit.object.outgoing_function_values, sizeof(arm_values[local]));
+        effect->modifier_shader = &stock.shader;
+        effect->modifier_animation.values = arm_values[local];
+        effect->modifier_animation.colors = unit.object.outgoing_change_colors;
+    }
+    return shield_look_arms(local, unit_index, hands, effect);
+}
+
 static void export_shader(struct shield_look_plasma const *p)
 {
     unsigned char const *b = (unsigned char const *)p;
@@ -219,7 +236,7 @@ int main(int argc, char **argv)
     if (!strcmp(argv[1], "classic") || !strcmp(argv[1], "invalid-setting") ||
         !strncmp(argv[1], "authored-", 9) || !strcmp(argv[1], "missing")) {
         CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        CHECK(!shield_look_arms(0, 0, 7, &effect)); CHECK(!effect.modifier_shader); return 0;
+        CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader == &stock.shader); return 0;
     }
     if (!strcmp(argv[1], "malformed-noise")) {
         CHECK(!shield_look_read_noise(NONE)); CHECK(!shield_look_read_noise(3));
@@ -227,19 +244,30 @@ int main(int argc, char **argv)
         bitmap_group.bitmaps.count = 2; CHECK(!shield_look_read_noise(3)); return 0;
     }
     body = shield_look_body(0, &stock.shader); CHECK(body != &stock.shader);
-    CHECK(shield_look_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader != body);
+    CHECK(draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader != body);
     CHECK(shield_look_stock_shader(&stock)); /* no mutation of the source tag */
     CHECK(effect.modifier_animation.values[1] == 0.5f);
     if (!strcmp(argv[1], "export")) {
         export_shader((struct shield_look_plasma *)body);
         export_shader((struct shield_look_plasma *)effect.modifier_shader); return 0;
     }
-    if (!strcmp(argv[1], "profiles")) {
+    if (!strcmp(argv[1], "arms-off")) {
+        arm_setting = 0;
+        CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(!effect.modifier_shader);
+        CHECK(shield_look_body(0, &stock.shader) == body);
+        arm_setting = 1; CHECK(draw_arms(0, 0, 7, &effect));
+        CHECK(effect.modifier_animation.values == arm_values[0]);
+        CHECK(effect.modifier_animation.colors == unit.object.outgoing_change_colors);
+    } else if (!strcmp(argv[1], "profiles")) {
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->offset_source == stock.offset_source);
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->offset_amount == stock.offset_amount);
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->offset_exponent == stock.offset_exponent);
+        CHECK(effect.modifier_animation.values == arm_values[0]);
         CHECK(((struct shield_look_plasma *)body)->primary_scale == 18.f);
         CHECK(((struct shield_look_plasma *)effect.modifier_shader)->primary_scale == 45.f);
         CHECK(((struct shield_look_plasma *)effect.modifier_shader)->secondary_scale == 62.f);
         CHECK(((struct shield_look_plasma *)body)->primary_map.index == 3);
-        overshield = 1; CHECK(shield_look_arms(0, 0, 7, &effect)); CHECK(effect.modifier_animation.values[1] == 0.75f);
+        overshield = 1; CHECK(draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_animation.values[1] == 0.75f);
         CHECK(unit.object.outgoing_function_values[1] == 0.5f);
     } else if (!strcmp(argv[1], "outer")) {
         struct shield_look_plasma original_body, outer_body, original_arms;
@@ -247,7 +275,7 @@ int main(int argc, char **argv)
         setting = "enhanced";
         original_pointer = shield_look_body(0, &stock.shader);
         original_body = *(struct shield_look_plasma *)original_pointer;
-        CHECK(shield_look_arms(0, 0, 7, &effect));
+        CHECK(draw_arms(0, 0, 7, &effect));
         original_arms = *(struct shield_look_plasma *)effect.modifier_shader;
         setting = "enhanced2";
         outer_pointer = shield_look_body(0, &stock.shader);
@@ -259,21 +287,21 @@ int main(int argc, char **argv)
         outer_body.offset_amount = original_body.offset_amount;
         outer_body.offset_exponent = original_body.offset_exponent;
         CHECK(!memcmp(&outer_body, &original_body, sizeof(outer_body)));
-        CHECK(shield_look_arms(0, 0, 7, &second));
+        CHECK(draw_arms(0, 0, 7, &second));
         CHECK(!memcmp(&original_arms, second.modifier_shader, sizeof(original_arms)));
         CHECK(!memcmp(&original_body, original_pointer, sizeof(original_body)));
         setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        CHECK(!shield_look_arms(0, 0, 7, &second));
+        CHECK(!draw_arms(0, 0, 7, &second));
         setting = "enhanced2"; CHECK(shield_look_body(0, &stock.shader) == outer_pointer);
         setting = "enhanced"; CHECK(shield_look_body(0, &stock.shader) == original_pointer);
     } else if (!strcmp(argv[1], "split")) {
         unit.object.outgoing_function_values[1] = 0.9f;
-        CHECK(shield_look_arms(1, 0, 7, &second)); CHECK(second.modifier_animation.values != effect.modifier_animation.values);
+        CHECK(draw_arms(1, 0, 7, &second)); CHECK(second.modifier_animation.values != effect.modifier_animation.values);
         CHECK(effect.modifier_animation.values[1] == 0.5f && second.modifier_animation.values[1] == 0.9f);
-        CHECK(!shield_look_arms(-1, 0, 7, &second)); CHECK(!shield_look_arms(4, 0, 7, &second));
+        CHECK(!draw_arms(-1, 0, 7, &second)); CHECK(!draw_arms(4, 0, 7, &second));
     } else if (!strcmp(argv[1], "toggle")) {
         setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        CHECK(!shield_look_arms(0, 0, 7, &second));
+        CHECK(!draw_arms(0, 0, 7, &second));
         setting = argc == 3 ? argv[2] : "enhanced"; CHECK(shield_look_body(0, &stock.shader) == body);
     } else if (!strcmp(argv[1], "reload")) {
         shield_look_reset(); stock.primary_scale = 80.f;
