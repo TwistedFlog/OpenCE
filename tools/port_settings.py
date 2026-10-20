@@ -234,16 +234,7 @@ _video["categories"] = [
      "The field of view and the first-person\nweapon. Their defaults keep the stock view."),
     ("EXTRA EFFECTS:", "video_settings/extra_effects",
      "Visual modifiers the stock game does not\nhave, such as HDR and overshields."),
-    ("SHIELD LOOK:", "video_settings/shield_look",
-     "Classic or enhanced body and arm shields.\nMaps with custom shields keep their own look."),
 ]
-SCREENS["video_settings/shield_look"] = {
-    "screen": "shield_look_settings_screen", "header": _video["header"], "spacing": 30,
-    "rows": [
-        ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced"), ("ENHANCED 2", "enhanced2")],
-         "Enhanced 2: a small outer flare on body shields.\nSame enhanced arms. Custom shields stay.", None),
-    ],
-}
 SCREENS["video_settings/fov_viewmodels"] = {
     "screen": "fov_viewmodel_settings_screen", "header": _video["header"], "spacing": 30,
     "rows": [
@@ -255,6 +246,8 @@ SCREENS["video_settings/fov_viewmodels"] = {
          "Draw first-person weapons, hands and attached\nvisuals. Gameplay and sound continue when off.", None),
         ("PASSENGER THIRD PERSON:", "display.passenger_third_person", ON_OFF,
          "Third-person Warthog and Scorpion passengers in\nthe campaign and co-op. Weapon zoom is disabled.", None),
+        ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced")],
+         "Enhanced: gold shields with a small body flare.\nIncludes arm shields. Custom shields stay.", None),
         ("ARM SHIELDS:", "display.viewmodel_shield", ON_OFF,
          "The energy shield's flare on your first-person\narms too, as on your body.", None),
         ("LEGS:", "display.first_person_legs", ON_OFF,

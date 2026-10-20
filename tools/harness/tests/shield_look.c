@@ -251,7 +251,7 @@ int main(int argc, char **argv)
         original_arms = *(struct shield_look_plasma *)effect.modifier_shader;
         setting = "enhanced2";
         outer_pointer = shield_look_body(0, &stock.shader);
-        CHECK(outer_pointer != original_pointer);
+        CHECK(outer_pointer == original_pointer);
         outer_body = *(struct shield_look_plasma *)outer_pointer;
         CHECK(outer_body.offset_source == 2 && outer_body.offset_amount == 0.0125f);
         CHECK(outer_body.offset_exponent == 0.5f);

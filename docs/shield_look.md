@@ -1,9 +1,10 @@
 # Shield Look
 
-Video Setup > SHIELD LOOK selects CLASSIC (the default), ENHANCED or ENHANCED 2.
+Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default)
+or ENHANCED. The former ENHANCED 2 profile is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
-CMT Snow Grove's body and first-person plasma parameters on stock Spartan
-shields. This is a local rendering feature in `port/linux/game/shield_look.c`.
+CMT Snow Grove's plasma pattern and first-person parameters with the approved
+small outward body flare on stock Spartan shields. This is a local rendering feature in `port/linux/game/shield_look.c`.
 It does not use the mod loader or change simulation, shield strength, damage,
 network messages, map tags, models or cache files. No network-version change
 is required.
@@ -28,9 +29,9 @@ the exact noise data through its existing texture loader.
 
 The multiplayer unit is tag 1880, its body modifier tag 1935; the globals'
 first-person hands are model 2157 with plasma material 2163. Both shader
-noise references point to bitmap 1126, external CE resource 863. The two
-shader copies use the following inspected values (the regression test
-compares their rendering fields byte-for-byte with the map):
+noise references point to bitmap 1126, external CE resource 863. The original
+CMT shaders use the following inspected values. The regression test compares
+all rendering fields, allowing only the approved body displacement below:
 
 | Parameter | Body | First-person hands |
 | --- | --- | --- |
@@ -45,9 +46,9 @@ compares their rendering fields byte-for-byte with the map):
 | Secondary period / direction | 3.2 / (0, 2, 0.5) | same |
 | Secondary scale | 14 | 62 |
 
-For the original ENHANCED profile, retain source C rather than B: CMT has two object
-functions, and its unused C output is zero. The original shader's offset
-parameters are deliberately retained. ENHANCED's arm values are separate
+The original CMT profile uses source C rather than B: CMT has two object
+functions, and its unused C output is zero. ENHANCED deliberately replaces only the body's offset parameters as described
+below; the first-person parameters are retained. ENHANCED's arm values are separate
 from Arm Shields' values, so the latter's displacement cap does not alter
 the CMT profile. CMT supplies duplicate arm parts for the plasma layer: all
 68-byte vertices in its four shell parts (660, 574, 222 and 39 vertices)
@@ -57,21 +58,20 @@ This preserves that map's geometry and animation. Controlled render
 comparisons on identical geometry are recorded below; the feature does not
 replace another map's models to make their silhouettes match CMT's.
 
-## ENHANCED 2
+## Approved ENHANCED profile
 
-`display.shield_look = "enhanced2"` (`HALO_SHIELD_LOOK=enhanced2`) retains
-ENHANCED's first-person shader exactly. Its body shader differs only in
-normal displacement: outgoing hit intensity B, exponent 0.5 and amount
-0.0125 world units. This starts small: at full intensity the outer layer is
-about 3.8 cm from the suit, shrinking with the square root of hit intensity.
-The CMT pattern, colors, animation and brightness remain unchanged. This is
-an intentional body-only variant, not part of the exact CMT reference.
+ENHANCED now uses the approved former ENHANCED 2 appearance exactly. The
+body displacement is outgoing hit intensity B, exponent 0.5 and amount
+0.0125 world units (about 3.8 cm at full intensity). The CMT pattern, colors,
+animation, brightness and complete first-person shader remain unchanged.
+The former skin-tight body option and separate SHIELD LOOK submenu are gone.
 
-A separate stable body copy avoids changing shaders already queued for
-another view when switching modes. Both enhanced modes use the same
-conservative eligibility and map-unload cleanup. No new shared-engine hook,
-map-family adapter, geometry mutation or simulation change is needed: the
-existing plasma renderer already displaces vertices along their normals.
+Existing `"enhanced2"` config/environment values normalize to `"enhanced"`
+at load, so playtest selections retain their appearance and show ENHANCED in
+the menu. Both spellings also select the same stable shader in the feature.
+There is only one enhanced body copy. CLASSIC still preserves stock behavior.
+No shared-engine hook, map-family adapter, geometry mutation or simulation
+change is needed; the existing renderer displaces vertices along normals.
 
 ## Map authority and isolation
 
@@ -132,7 +132,7 @@ packets can retain their addresses. Arm animation values are separate for
 each local player. Disabling takes effect on subsequent draw submissions;
 the stable copies remain available for already queued packets until teardown.
 
-## Verification
+## Verification history
 
 `python -m pytest -q tools/test_shield_look.py` compiles the actual feature
 module as 32-bit C89 with fake engine services. It covers CLASSIC/invalid
@@ -225,3 +225,16 @@ The ENHANCED 2 production build passed both host roles in the two-player
 Beaver Creek network comparison against CLASSIC, with damage/death events
 and real rendering (24 seconds compared per run, existing judge/tolerances).
 No networking implementation or version changed.
+
+Profile consolidation: 63 focused tests passed, including exact CMT rendering
+fields with only the approved body displacement substituted, both saved
+spellings selecting the same shader, unchanged arms, and removal of the
+submenu from the generated screens and asset manifest. Earlier ENHANCED
+references in this validation history describe the original CMT comparison;
+the approved ENHANCED 2 appearance is now the current ENHANCED profile.
+
+The consolidated profile built successfully for Windows, Android guest/host
+and web. A hidden Windows OpenGL menu run at 1280x960 confirmed the relocated
+row fits and an `enhanced2` environment value displays as ENHANCED. The shader
+parameters are identical to the approved profile tested above; gameplay and
+network runs were not repeated for this naming/menu consolidation.

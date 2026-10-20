@@ -82,7 +82,6 @@ struct shield_look_entry
 	long hands_index;
 	boolean eligible;
 	struct shield_look_plasma body;
-	struct shield_look_plasma outer_body;
 	struct shield_look_plasma arms;
 };
 
@@ -364,13 +363,12 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	entry->body = entry->arms = *plasma;
 	shield_look_profile(&entry->body, FALSE);
 	shield_look_profile(&entry->arms, TRUE);
-	entry->outer_body = entry->body;
 	/* A small normal displacement follows the visible hit intensity (B),
 	not the unused stock C function. At full intensity this is 3.8 cm;
 	the square root keeps a gentle outer layer while the hit fades. */
-	entry->outer_body.offset_source = 2;
-	entry->outer_body.offset_amount = 0.0125f;
-	entry->outer_body.offset_exponent = 0.5f;
+	entry->body.offset_source = 2;
+	entry->body.offset_amount = 0.0125f;
+	entry->body.offset_exponent = 0.5f;
 	entry->eligible = TRUE;
 	return entry;
 }
@@ -396,11 +394,7 @@ struct shader *shield_look_body(long object_index, struct shader *original)
 		return original;
 	first_person = TAG_BLOCK_GET_ELEMENT(&globals->first_person_interface, 0, struct game_globals_first_person_interface);
 	entry = shield_look_for_unit(object_index, first_person->hands.index);
-	if (!entry)
-		return original;
-	/* Keep both copies stable: queued draws can retain either profile. */
-	return !strcmp(config_string("display.shield_look"), "enhanced2") ?
-		&entry->outer_body.shader : &entry->body.shader;
+	return entry ? &entry->body.shader : original;
 }
 
 boolean shield_look_arms(short local_player_index, long unit_index, long hands_model_index,

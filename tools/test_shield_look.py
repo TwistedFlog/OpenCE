@@ -72,8 +72,12 @@ def test_generator_lights(shield_tool, case):
 def test_menu_and_default():
     sys.path.insert(0, str(ROOT / "tools"))
     import port_settings
-    spec = port_settings.SCREENS["video_settings/shield_look"]
-    assert spec["rows"][0][2] == [("CLASSIC", "classic"), ("ENHANCED", "enhanced"), ("ENHANCED 2", "enhanced2")]
+    spec = port_settings.SCREENS["video_settings/fov_viewmodels"]
+    row = next(row for row in spec["rows"] if row[1] == "display.shield_look")
+    assert row[2] == [("CLASSIC", "classic"), ("ENHANCED", "enhanced")]
+    assert "video_settings/shield_look" not in port_settings.SCREENS
+    assert not list((ROOT / "port/assets/menus/ce").glob("*.shield_look.xml"))
+    assert "video_settings.shield_look.xml" not in (ROOT / "port/assets/menus/menus.json").read_text()
     config = (ROOT / "port/linux/src/port_config.c").read_text()
     assert re.search(r'"display.shield_look", _config_string, "\\"classic\\"", "HALO_SHIELD_LOOK"', config)
     for name, lines in port_settings.settings_files().items():
@@ -121,7 +125,7 @@ def map_tags(path):
     return data, tags, result, base
 
 
-def test_exact_cmt_parameters(shield_tool):
+def test_approved_profile_parameters(shield_tool):
     path = os.environ.get("SHIELD_LOOK_REFERENCE_MAP")
     if not path:
         pytest.skip("set SHIELD_LOOK_REFERENCE_MAP for the local CMT comparison")
@@ -130,8 +134,12 @@ def test_exact_cmt_parameters(shield_tool):
     # Export only rendering fields, in their on-disk order, excluding opaque
     # padding, addresses and radiosity (not used by the plasma draw).
     spans = [(0x2C, 0x40), (0x60, 0x82), (0xC0, 0xD4), (0x108, 0x11C)]
-    expected = b"".join(tags[entries[i][2] + lo:entries[i][2] + hi]
-                        for i in (1935, 2163) for lo, hi in spans)
+    body = bytearray(tags[entries[1935][2]:entries[1935][2] + 0x14C])
+    # The approved ENHANCED 2 displacement is now the sole ENHANCED body.
+    struct.pack_into("<h", body, 0x34, 2)
+    struct.pack_into("<ff", body, 0x38, 0.0125, 0.5)
+    arms = tags[entries[2163][2]:entries[2163][2] + 0x14C]
+    expected = b"".join(profile[lo:hi] for profile in (body, arms) for lo, hi in spans)
     assert bytes.fromhex(result.stdout.decode().strip()) == expected
 
 
