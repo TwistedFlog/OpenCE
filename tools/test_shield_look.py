@@ -34,6 +34,9 @@ def shield_tool(tmp_path_factory):
     source = source.replace("static boolean shield_look_stock_noise(", "static boolean shield_look_read_noise(")
     source = source.replace("!shield_look_stock_noise(plasma->primary_map.index)",
                             "!noise_matches")
+    source = source.replace("static boolean shield_look_stock_light_texture(",
+                            "static boolean shield_look_read_light_texture(")
+    source = source.replace("shield_look_stock_light_texture(bitmap.index)", "light_texture_matches")
     shader_header = (ROOT / "source/shaders/shader_definitions.h").read_text()
     object_header = (ROOT / "source/objects/object_definitions.h").read_text()
     structs = "\n".join(structure(shader_header, n) for n in
@@ -44,7 +47,7 @@ def shield_tool(tmp_path_factory):
     output = work / ("shield.exe" if os.name == "nt" else "shield")
     flags = ["-m32", "-std=gnu89", "-Wall", "-Werror", "-Wno-unused-function", "-Wno-multichar"]
     if os.name == "nt" and not os.environ.get("SHIELD_LOOK_CC"):
-        flags += ["--target=i686-pc-windows-msvc", "-fuse-ld=lld"]
+        flags += ["--target=i686-pc-windows-msvc", "-fuse-ld=lld", "-D_CRT_SECURE_NO_WARNINGS"]
     command = [cc, *flags, "-I", str(work), str(ROOT / "tools/harness/tests/shield_look.c"), "-o", str(output)]
     result = subprocess.run(command, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -55,6 +58,12 @@ def shield_tool(tmp_path_factory):
                                   "authored-function", "authored-hands", "authored-body", "authored-decal", "missing", "split",
                                   "toggle", "reload", "capacity", "malformed-noise"])
 def test_shield_look(shield_tool, case):
+    run = subprocess.run([str(shield_tool), case], capture_output=True, text=True, timeout=15)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+@pytest.mark.parametrize("case", ["stock-lights", "authored-light", "authored-light-stage", "authored-light-texture"])
+def test_generator_lights(shield_tool, case):
     run = subprocess.run([str(shield_tool), case], capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stdout + run.stderr
 
@@ -144,6 +153,32 @@ def test_stock_fingerprints(shield_tool, tmp_path):
     result = subprocess.run([str(shield_tool), "reference", str(shader_path), str(pixels_path)],
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_stock_generator_materials(shield_tool, tmp_path):
+    path = os.environ.get("SHIELD_LOOK_STOCK_MAP")
+    if not path:
+        pytest.skip("set SHIELD_LOOK_STOCK_MAP for the local generator-light comparison")
+    data, tags, entries, base = map_tags(Path(path))
+    by_name = {entry[1]: entry for entry in entries}
+    for name in (r"characters\cyborg\shaders\light shield", r"characters\cyborg\shaders\light shield generator"):
+        shader = by_name[name][2]
+        count, address = struct.unpack_from("<II", tags, shader + 0x54)
+        assert count == 1
+        stage = address - base
+        bitmap_tag = struct.unpack_from("<I", tags, stage + 0x78)[0] & 0xFFFF
+        group = entries[bitmap_tag][2]
+        count, address = struct.unpack_from("<II", tags, group + 0x60)
+        assert count == 1
+        bitmap = address - base
+        assert struct.unpack_from("<5H", tags, bitmap + 4) == (512, 512, 1, 0, 14)
+        offset, size = struct.unpack_from("<II", tags, bitmap + 24)
+        paths = [tmp_path / name for name in ("light.bin", "stage.bin", "pixels.bin")]
+        for dest, content in zip(paths, (tags[shader:shader + 0x6C], tags[stage:stage + 0xDC], data[offset:offset + size])):
+            dest.write_bytes(content)
+        result = subprocess.run([str(shield_tool), "light-reference", *map(str, paths)],
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_cmt_noise_is_stock(shield_tool, tmp_path):

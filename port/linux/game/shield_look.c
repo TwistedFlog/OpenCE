@@ -184,6 +184,72 @@ static boolean shield_look_stock_function(struct object_definition const *defini
 	return hash == UINT32_C(0xD130B3A8);
 }
 
+/* The stock body includes two transparent generator lights. They are not
+shield shells. Recognize their complete material and texture, rather than
+excluding every Chicago material or trusting a map's tag names. */
+static boolean shield_look_stock_light_texture(long tag_index)
+{
+	struct bitmap_group *group;
+	struct bitmap_data *bitmap;
+	byte *pixels;
+	boolean complete = FALSE;
+	uint32_t hash;
+
+	if (tag_index == NONE || tag_get_group_tag(tag_index) != 'bitm')
+		return FALSE;
+	group = bitmap_group_get(tag_index);
+	if (!cache_file_tag_cache_contains(group, sizeof(*group)) || group->bitmaps.count != 1 ||
+		!cache_file_tag_cache_contains(group->bitmaps.address, sizeof(*bitmap)))
+		return FALSE;
+	bitmap = group->bitmaps.address;
+	if (bitmap->width != 512 || bitmap->height != 512 || bitmap->depth != 1 ||
+		bitmap->type != 0 || bitmap->format != 14 || bitmap->mipmap_count != 9 ||
+		(bitmap->flags & 0x1E) != 2 || bitmap->pixels_size < 174776 || bitmap->pixels_offset < 0)
+		return FALSE;
+	pixels = malloc(176128);
+	if (!pixels)
+		return FALSE;
+	memset(pixels, 0, 176128);
+	cache_file_read(tag_index, bitmap->pixels_offset, 174776, pixels, &complete, TRUE);
+	while (!complete)
+		SwitchToThread();
+	hash = shield_look_hash(UINT32_C(2166136261), pixels, 174776);
+	free(pixels);
+	return complete == TRUE && (hash == UINT32_C(0x71B35CD8) ||
+		hash == UINT32_C(0x42B1A420) || hash == UINT32_C(0xE5E7E894));
+}
+
+static boolean shield_look_stock_light(struct shader const *shader)
+{
+	byte copy[0x6C];
+	byte stage[0xDC];
+	struct tag_reference lens_flare;
+	struct tag_reference bitmap;
+	struct tag_block layers;
+	struct tag_block maps;
+	uint32_t hash;
+
+	if (!cache_file_tag_cache_contains(shader, sizeof(copy)) || shader->base.type != 6)
+		return FALSE;
+	memcpy(copy, shader, sizeof(copy));
+	memcpy(&lens_flare, copy + 0x38, sizeof(lens_flare));
+	memcpy(&layers, copy + 0x48, sizeof(layers));
+	memcpy(&maps, copy + 0x54, sizeof(maps));
+	if (lens_flare.index != NONE || layers.count != 0 || maps.count != 1 ||
+		!cache_file_tag_cache_contains(maps.address, sizeof(stage)))
+		return FALSE;
+	memset(copy + 0x24, 0, 4);
+	memset(copy + 0x38, 0, 0x28);
+	hash = shield_look_hash(UINT32_C(2166136261), copy, sizeof(copy));
+	if (hash != UINT32_C(0x66E15FE3) && hash != UINT32_C(0x015C769C))
+		return FALSE;
+	memcpy(stage, maps.address, sizeof(stage));
+	memcpy(&bitmap, stage + 0x6C, sizeof(bitmap));
+	memset(stage + 0x6C, 0, sizeof(bitmap));
+	return shield_look_hash(UINT32_C(2166136261), stage, sizeof(stage)) == UINT32_C(0x7FDA0175) &&
+		shield_look_stock_light_texture(bitmap.index);
+}
+
 static boolean shield_look_model_has_no_overlay(long model_index)
 {
 	struct model *model;
@@ -191,6 +257,7 @@ static boolean shield_look_model_has_no_overlay(long model_index)
 	struct shader const *surface;
 	word flags;
 	long index;
+	unsigned long group_tag;
 
 	if (model_index == NONE)
 		return FALSE;
@@ -204,10 +271,16 @@ static boolean shield_look_model_has_no_overlay(long model_index)
 	{
 		/* A plasma shell, Chicago layer or other transparent surface may
 		be an authored shield. Unknown surfaces are preserved too. */
-		if (references[index].shader.index == NONE ||
-			tag_get_group_tag(references[index].shader.index) != 'soso')
+		if (references[index].shader.index == NONE)
+			return FALSE;
+		group_tag = tag_get_group_tag(references[index].shader.index);
+		if (group_tag != 'soso' && group_tag != 'schi')
 			return FALSE;
 		surface = shader_definition_get(references[index].shader.index);
+		if (group_tag == 'schi' && shield_look_stock_light(surface))
+			continue;
+		if (group_tag != 'soso')
+			return FALSE;
 		if (!cache_file_tag_cache_contains(surface, sizeof(*surface) + sizeof(flags)))
 			return FALSE;
 		/* shader_model can also author a transparent shell with its

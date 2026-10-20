@@ -46,6 +46,7 @@ static struct object_datum object;
 static struct unit_datum unit;
 static struct game_globals globals;
 static int noise_matches = 1;
+static int light_texture_matches = 1;
 static int overshield;
 static unsigned char *reference_pixels;
 static long reference_size;
@@ -139,10 +140,57 @@ int main(int argc, char **argv)
     struct shader *body;
     int i;
     FILE *file;
+    byte light[0x6C] = {0}, stage[0xDC] = {0};
+    struct tag_block light_maps = {1, stage, NULL};
+    struct tag_reference light_bitmap = {'bitm', NULL, 0, 3};
+    struct tag_reference light_lens = {'lens', NULL, 0, NONE};
+    short light_type = 6, light_flags = 0x200, light_blend = 3, light_material = 11;
+    real one = 1.f, rotation = 360.f;
     CHECK(argc >= 2);
     setup();
     CHECK(shield_look_stock_shader(&stock));
     CHECK(shield_look_stock_function(&definition));
+    if (!strcmp(argv[1], "light-reference")) {
+        CHECK(argc == 5);
+        file = fopen(argv[2], "rb"); CHECK(file);
+        CHECK(fread(light, 1, sizeof(light), file) == sizeof(light)); fclose(file);
+        file = fopen(argv[3], "rb"); CHECK(file);
+        CHECK(fread(stage, 1, sizeof(stage), file) == sizeof(stage)); fclose(file);
+        memcpy(light + 0x54, &light_maps, sizeof(light_maps));
+        memcpy(stage + 0x6C, &light_bitmap, sizeof(light_bitmap));
+        CHECK(shield_look_stock_light((struct shader *)light));
+        file = fopen(argv[4], "rb"); CHECK(file); fseek(file, 0, SEEK_END); reference_size = ftell(file);
+        rewind(file); reference_pixels = malloc(reference_size); CHECK(reference_pixels);
+        CHECK(fread(reference_pixels, 1, reference_size, file) == (size_t)reference_size); fclose(file);
+        bitmap.width = bitmap.height = 512; bitmap.depth = 1; bitmap.type = 0;
+        bitmap.format = 14; bitmap.mipmap_count = 9; bitmap.flags = 0x83; bitmap.pixels_size = reference_size;
+        CHECK(shield_look_read_light_texture(3)); reference_pixels[0] ^= 1;
+        CHECK(!shield_look_read_light_texture(3)); reference_pixels[0] ^= 1;
+        bitmap.width = 256; CHECK(!shield_look_read_light_texture(3)); bitmap.width = 512;
+        read_failed = 1; CHECK(!shield_look_read_light_texture(3)); free(reference_pixels);
+        return 0;
+    }
+    if (!strcmp(argv[1], "stock-lights") || !strncmp(argv[1], "authored-light", 14)) {
+        memcpy(light + 0x22, &light_material, 2); memcpy(light + 0x24, &light_type, 2);
+        memcpy(light + 0x28, &light_flags, 2); memcpy(light + 0x2C, &light_blend, 2);
+        memcpy(light + 0x38, &light_lens, sizeof(light_lens));
+        memcpy(light + 0x54, &light_maps, sizeof(light_maps));
+        memcpy(stage + 0x6C, &light_bitmap, sizeof(light_bitmap));
+        memcpy(stage + 0x54, &one, 4); memcpy(stage + 0x58, &one, 4);
+        for (i = 0xA8; i <= 0xC8; i += 8) memcpy(stage + i, &one, 4);
+        memcpy(stage + 0xD0, &rotation, 4);
+        CHECK(shield_look_stock_light((struct shader *)light));
+        /* Both stock generator materials must pass; unknown Chicago
+           layers, altered stages and texture changes must not. */
+        light[0x22] = 0; CHECK(shield_look_stock_light((struct shader *)light));
+        tags[5] = light; groups[5] = 'schi';
+        if (!strcmp(argv[1], "authored-light")) light[0x28] ^= 1;
+        if (!strcmp(argv[1], "authored-light-stage")) stage[0x54] ^= 1;
+        if (!strcmp(argv[1], "authored-light-texture")) light_texture_matches = 0;
+        body = shield_look_body(0, &stock.shader);
+        CHECK((body != &stock.shader) == !strcmp(argv[1], "stock-lights"));
+        return 0;
+    }
     if (!strcmp(argv[1], "reference")) {
         CHECK(argc == 4 || argc == 5); file = fopen(argv[2], "rb"); CHECK(file);
         CHECK(fread(&stock, 1, sizeof(stock), file) == sizeof(stock)); fclose(file);

@@ -53,9 +53,9 @@ the CMT profile. CMT supplies duplicate arm parts for the plasma layer: all
 68-byte vertices in its four shell parts (660, 574, 222 and 39 vertices)
 are byte-identical to their underlying arm parts. The feature uses the
 engine's modifier pass on the current map's hands.
-This preserves that map's geometry and animation. Matching shader data is
-verified; matching rendered output on different geometry is not established
-by that check alone.
+This preserves that map's geometry and animation. Controlled render
+comparisons on identical geometry are recorded below; the feature does not
+replace another map's models to make their silhouettes match CMT's.
 
 ## Map authority and isolation
 
@@ -64,8 +64,11 @@ families. A biped qualifies only when its modifier's complete normalized
 plasma definition matches the stock cyborg shield, its shield-driving
 function and mappings are stock, and both noise references identify the same
 verified stock bitmap. Both the body model and the globals' hands must have
-only opaque model materials. Plasma shells, Chicago/other transparent
-materials, alpha-blended model decals, missing/unknown data and extra object
+only opaque model materials or the two exactly identified stock Chicago
+generator-light materials. Their complete normalized definitions, single
+texture stages and full DXT1 texture mip chains are checked; tag names are
+not trusted. Other plasma shells or transparent materials, alpha-blended
+model decals, missing/unknown data and extra object
 functions preserve the authored look. A modified shader or noise texture
 retaining the stock tag name is still rejected. This can conservatively
 leave an otherwise stock-looking custom map unchanged.
@@ -79,6 +82,9 @@ FNV-1a fingerprints, after the documented normalization:
 | Xbox swizzled A8Y8 noise, 74898 bytes excluding padding | `f2f70788` |
 | CE linear ARGB noise, 149796 bytes | `e7f72da4` |
 | The same ARGB noise in MCC's hardware layout | `18ac1e94` |
+| Stock generator-light definitions; relocated references/blocks and type zeroed | `66e15fe3`, `015c769c` |
+| Stock generator-light stage; relocated bitmap reference zeroed | `7fda0175` |
+| Generator-light DXT1 texture, 174776 bytes, Xbox / CE / inspected MCC layout | `71b35cd8`, `42b1a420`, `e5e7e894` |
 
 The feature calls the common `cache_file_read` interface. Xbox stays on its
 cache stream, CE on its resource-map reader, and MCC on its own prepared
@@ -87,8 +93,8 @@ folder, or modify family detection. Bitmap reads and tag/block accesses are
 bounded. A failed read or full 64-entry profile cache keeps the map's look.
 The stock shader and function signatures were checked in Xbox
 `beavercreek.map`, CE `deathisland.map` and version-13 MCC
-`BetterWithFriends/b30.map`; all three match. This is a data inspection,
-not a claim that live map-family transitions have been tested.
+`BetterWithFriends/b30.map`; all three match. These chains were subsequently
+exercised through their own loaders in the Windows gameplay runs below.
 
 ## Necessary shared hooks
 
@@ -122,20 +128,66 @@ and stock Xbox caches to additionally check exact CMT parameters, all noise
 texels, and the actual feature reader's Xbox/CE/MCC-layout fingerprints.
 `SHIELD_LOOK_CC` optionally selects a 32-bit compiler wrapper.
 
-Implementation validation on Windows: these 20 tests passed, along with the
-21 existing Arm Shields tests, including their negative controls. The feature
-module and three modified engine files compiled against the real project
-headers using Zig's 32-bit compiler and a temporary MinGW inline compatibility
-shim. This is not a standard MSVC build. Broader checks reported 46 passes,
-135 skips (primarily the missing standard clang/cache-report tool) and five
-web-graph failures caused by Windows backslashes versus the tests' POSIX path
-expectations. No build-generator code was changed.
+Validation on Windows (20 October 2026): 25 Shield Look tests and all 21
+existing Arm Shields tests passed, including negative controls. The added
+stock-light tests exercise the real generator-light definitions and pixels,
+and reject altered materials, stages and textures. The harness used LLVM's
+32-bit MSVC target; its existing Unix `-lm` argument was omitted by a local
+Windows wrapper because the Microsoft runtime already supplies those calls.
 
-Full platform builds were attempted: Windows stopped at missing `llvm-rc`;
-Android and web targets were unavailable because no NDK or Emscripten was
-installed. A separate settings-table compile attempt with MinGW stopped on
-its intrinsic declarations conflicting with the project's MSVC ABI headers.
-No modified game executable, visual comparison, live map-family
-transition or two-instance networking test was possible in this environment.
-Those remain required before treating the feature as runtime-validated or
-claiming pixel-identical output. No gameplay/network structures were changed.
+Release, portable Windows, Android guest/host, and web targets built with
+LLVM 23.1.4, Visual Studio Build Tools 2022 and Windows SDK, Android NDK r30,
+and Emscripten 6.0.10. Windows used the normal project build. The Android and
+web builds used local equivalents for generated Unix shell bootstrap/copy
+commands and normalized response-file paths; no build-generator changes are
+part of this feature. Cross-platform compilation is not device/browser
+runtime validation.
+
+Hidden Windows OpenGL runs used isolated data/save folders, at most two
+instances, real scripted damage, and bounded copies of the supplied maps.
+Original maps were never edited. Script-reference and spawn controls in the
+copies made the hits and cameras reproducible; MCC fixtures preserved script
+indices while making startup scripts dormant. A temporary diagnostic build
+controlled randomness and recorded render-path selection. Its instrumentation
+and random-seed change were removed before the final production builds.
+
+The live tests found that the original eligibility filter rejected stock
+Spartan generator lights. The exact material/stage/texture checks above fix
+that without admitting arbitrary Chicago shield shells.
+
+Visual equivalence was checked separately from eligibility:
+
+- CMT's arm shell has identical vertices **and triangle strips** to the
+  underlying hands. On controlled copies with identical geometry, lighting,
+  hit timing and interpolation disabled, the original authored first-person
+  shell and ENHANCED's modifier pass produced pixel-identical captures.
+  Both comparison copies used the same opaque body-underlay control to
+  exclude unrelated CMT weapon/lamp materials from eligibility.
+- For the body, a temporary diagnostic alternated the original CMT shader
+  and the feature's stock-based profile on the same frozen in-game scene.
+  Twenty consecutive frame comparisons had zero differing pixels. This
+  isolates the shader from different random idle animations or lighting
+  phases between processes. The shield was visibly active in the captures.
+- Normal runtime captures showed ENHANCED on stock Xbox shields. Render-path
+  audits also confirmed both body and hands overrides on stock CE
+  `deathisland` and MCC `BetterWithFriends/b30` shield chains.
+- Authored magenta/scale variants of those Xbox, CE and MCC maps retained
+  their original body shader pointers and received no enhanced arm pass.
+  Unaltered CMT body/arm materials also received neither override. Their
+  authored appearance remained visible in gameplay.
+
+The visual claim concerns the shield shader, not replacing another map's
+armor, hands, animations, lighting or camera with CMT's. Those remain the
+map's own. The automated harness covers toggling, split-screen state,
+failed reads, reloads and capacity. Live runs cover Xbox UI-to-CE/MCC loads
+and shutdown; a full gameplay Xbox-to-CE-to-MCC transition chain, live
+split-screen, Android hardware and browser gameplay were not exercised.
+No gameplay/network structures were changed.
+
+The final production Windows executable also passed the repository's
+two-player network comparison on Beaver Creek, with real rendering,
+CLASSIC versus ENHANCED, scripted damage/deaths and swapped host roles.
+Both runs compared 22 seconds and passed the existing judge/tolerances
+(562 and 660 prediction-drift samples). A local adapter supplied Windows
+process handling and isolated file paths; the comparison logic was unchanged.
+This does not cover browser transport or internet matchmaking.
