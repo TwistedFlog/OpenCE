@@ -16,20 +16,19 @@ The legs are found from the skeleton, once per biped definition: the pelvis
 and the head are the biped's own runtime nodes (the ones its autoaim pill
 uses). The pelvis's child on the way up to the head is the spine; the nodes
 below the pelvis but not below the spine are the legs. Everything else past
-the pelvis's own ancestors is drawn onto the spine's joint, shrunk to
-nothing (FIRST_PERSON_LEGS_COLLAPSE), so the upper body's skin closes the
-waist as the vertices blended between the hips and the spine are pulled in
-towards the joint. The model's geometry is never read.
+the pelvis's own ancestors is drawn shrunk to nothing
+(FIRST_PERSON_LEGS_COLLAPSE) onto one point of the waist, part of the way
+from the pelvis's joint to the spine's (FIRST_PERSON_LEGS_LID), so the
+upper body's skin closes the waist as a low lid: the vertices blended
+between the hips and the spine are pulled in towards that point (onto the
+spine's joint, above the waist, they stood up as a dome). The model's
+geometry is never read.
 
 The pose is each local player's own (split-screen views draw their own
-bodies). The waist's top, where the upper body closes, is kept out of the
-view as Halo 2 keeps its first-person body's: the body is set back behind
-the eye, along its own level facing, a little looking ahead, and as far as
-keeps the waist below the bottom of the view looking down (up to
-FIRST_PERSON_LEGS_SET_BACK_MAXIMUM). The waist is taken from the skeleton
-too: spheres around the pelvis's and the spine's joints, as wide as the
-hips (FIRST_PERSON_LEGS_WAIST times the hip joints' distance from the
-pelvis's).
+bodies), set back a fixed distance behind the eye along the body's own
+level facing, so the body stands still on the ground as the view turns up
+and down: looking down, it is a little behind, as though the head leaned
+out over it.
 */
 
 #include "cseries.h"
@@ -40,8 +39,6 @@ pelvis's).
 #include "objects/objects.h"
 #include "objects/object_definitions.h"
 #include "objects/object_types.h"
-#include "render/render.h"
-#include "render/render_cameras.h"
 #include "tag_files/tag_groups.h"
 #include "units/biped_definitions.h"
 
@@ -50,22 +47,17 @@ pelvis's).
 enum
 {
 	FIRST_PERSON_LEGS_MODELS = 8,
-	/* render_cameras.c's _render_frustum_plane_bottom (its enum is its own) */
-	FIRST_PERSON_LEGS_BOTTOM_PLANE = 2,
 };
 
-/* how far behind the eye the body is drawn at least, world units (about
-9 cm), and at most (about 1 m), along its own level facing (tuned by eye) */
-#define FIRST_PERSON_LEGS_SET_BACK 0.03f
-#define FIRST_PERSON_LEGS_SET_BACK_MAXIMUM 0.33f
-/* how wide the waist is, as a multiple of the hip joints' distance from the
-pelvis's: the skin around the hips reaches past their joints (tuned by eye) */
-#define FIRST_PERSON_LEGS_WAIST 2.f
-/* how little the set-back moves the waist's distance from the bottom of the
-view, per unit, before setting it back is no use (looking up) */
-#define FIRST_PERSON_LEGS_TOWARD_MINIMUM 0.05f
-/* the scale the upper body is drawn at on the spine's joint: small enough
-that its skin is within a millimetre of the joint, not zero, which would
+/* how far behind the eye the body is drawn, world units (about 18 cm), along
+its own level facing (tuned by eye) */
+#define FIRST_PERSON_LEGS_SET_BACK 0.06f
+/* where on the way from the pelvis's joint (0) to the spine's (1) the upper
+body is drawn: lower, the waist sinks into a funnel; higher, it stands up as
+a dome (tuned by eye) */
+#define FIRST_PERSON_LEGS_LID 0.5f
+/* the scale the upper body is drawn at on the waist: small enough that its
+skin is within a millimetre of the lid's point, not zero, which would
 leave its vertices' normals without a length to normalize */
 #define FIRST_PERSON_LEGS_COLLAPSE 0.001f
 
@@ -219,51 +211,6 @@ static struct first_person_legs_model const *first_person_legs_model_get(
 	return entry;
 }
 
-/* how far back the body is drawn: at least FIRST_PERSON_LEGS_SET_BACK, and as
-far as keeps the waist below the bottom of the view (the bottom plane, whose
-distances are positive outside the view), at most
-FIRST_PERSON_LEGS_SET_BACK_MAXIMUM */
-static real first_person_legs_set_back(
-	struct model const *model,
-	short node_count,
-	short spine_index,
-	real_matrix4x3 const *nodes,
-	real_vector3d const *back,
-	real_plane3d const *bottom)
-{
-	short pelvis_index = TAG_BLOCK_GET_ELEMENT(&model->nodes, spine_index, struct model_node)->parent_node_index;
-	real toward = dot_product3d(&bottom->n, back);
-	real radius = 0.f;
-	real set_back = FIRST_PERSON_LEGS_SET_BACK;
-	short node_index;
-
-	/* (moved back, the waist barely leaves the view, or comes into it) */
-	if (toward < FIRST_PERSON_LEGS_TOWARD_MINIMUM)
-		return set_back;
-	/* (the hip joints: the pelvis's children but the spine) */
-	for (node_index = 0; node_index < node_count; node_index++)
-	{
-		if (node_index != spine_index &&
-			TAG_BLOCK_GET_ELEMENT(&model->nodes, node_index, struct model_node)->parent_node_index == pelvis_index)
-		{
-			real distance = distance3d(&nodes[node_index].position, &nodes[pelvis_index].position);
-
-			if (distance > radius)
-				radius = distance;
-		}
-	}
-	radius *= FIRST_PERSON_LEGS_WAIST;
-	{
-		real pelvis_needed = (radius - plane3d_distance_to_point(bottom, &nodes[pelvis_index].position)) / toward;
-		real spine_needed = (radius - plane3d_distance_to_point(bottom, &nodes[spine_index].position)) / toward;
-
-		set_back = MAX(set_back, MAX(pelvis_needed, spine_needed));
-	}
-	if (!(set_back <= FIRST_PERSON_LEGS_SET_BACK_MAXIMUM))
-		set_back = FIRST_PERSON_LEGS_SET_BACK_MAXIMUM;
-	return set_back;
-}
-
 /* ---------- public code */
 
 void first_person_legs_reset(
@@ -288,7 +235,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	real_matrix4x3 const *nodes;
 	real_matrix4x3 *pose;
 	real_vector3d back;
-	real set_back;
+	real_point3d lid;
 	long player_index;
 	short node_count;
 	short index;
@@ -329,19 +276,26 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	back.k = 0.f;
 	if (normalize3d(&back) <= 0.f)
 		back = *global_zero_vector3d;
-	set_back = first_person_legs_set_back(model, node_count, legs->spine_node_index, nodes, &back,
-		&render.frustum.world_planes[FIRST_PERSON_LEGS_BOTTOM_PLANE]);
+	{
+		real_point3d const *spine = &nodes[legs->spine_node_index].position;
+		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;
+
+		lid.x = pelvis->x + (spine->x - pelvis->x) * FIRST_PERSON_LEGS_LID;
+		lid.y = pelvis->y + (spine->y - pelvis->y) * FIRST_PERSON_LEGS_LID;
+		lid.z = pelvis->z + (spine->z - pelvis->z) * FIRST_PERSON_LEGS_LID;
+	}
 	for (index = 0; index < node_count; index++)
 	{
 		if (legs->collapsed[index])
 		{
 			pose[index] = nodes[legs->spine_node_index];
 			pose[index].scale *= FIRST_PERSON_LEGS_COLLAPSE;
+			pose[index].position = lid;
 		}
 		else
 			pose[index] = nodes[index];
-		pose[index].position.x += back.i * set_back;
-		pose[index].position.y += back.j * set_back;
+		pose[index].position.x += back.i * FIRST_PERSON_LEGS_SET_BACK;
+		pose[index].position.y += back.j * FIRST_PERSON_LEGS_SET_BACK;
 	}
 	return pose;
 }
