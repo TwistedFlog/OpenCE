@@ -375,6 +375,7 @@ void render_objects(
 
 /* port: port/linux/game/overshield_effect.c */
 real const *overshield_effect_values(long unit_index, real const *values);
+#include "shield_look.h" /* port: port/linux/game/shield_look.c */
 
 void render_object_shadows(
 	void)
@@ -530,6 +531,8 @@ static void render_object_list(
 						if (shader_type_is_valid_for_modifier(
 							model_effect.modifier_shader->base.type))
 						{
+							/* port: optional stock shield profile; authored map shaders stay authoritative. */
+							model_effect.modifier_shader = shield_look_body(object_index, model_effect.modifier_shader);
 							model_effect.modifier_animation.colors =
 								object->object.outgoing_change_colors;
 							/* port: an overshield as it rises and lasts

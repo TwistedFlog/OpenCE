@@ -42,9 +42,9 @@ SCREENS = {
     "video_settings": {
         "screen": "video_settings_screen",
         "header": ("header_profile_video_settings", f"{PE}/video_settings/header_profile_video_settings"),
-        # the other screens' 30px step. each platform packs its own rows, so
-        # a row hidden on this machine does not leave a gap
-        "spacing": 30,
+        # Eleven desktop rows, including categories, above the help text.
+        # Each platform packs its own rows without gaps for hidden entries.
+        "spacing": 26,
         "help_top": 364,
         "platform_places": True,
         # (rows in the place of the row before them: Window Size in
@@ -234,7 +234,16 @@ _video["categories"] = [
      "The field of view and the first-person\nweapon. Their defaults keep the stock view."),
     ("EXTRA EFFECTS:", "video_settings/extra_effects",
      "Visual modifiers the stock game does not\nhave, such as HDR and overshields."),
+    ("SHIELD LOOK:", "video_settings/shield_look",
+     "Classic or enhanced body and arm shields.\nMaps with custom shields keep their own look."),
 ]
+SCREENS["video_settings/shield_look"] = {
+    "screen": "shield_look_settings_screen", "header": _video["header"], "spacing": 30,
+    "rows": [
+        ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced")],
+         "Enhanced: CMT-style gold body and arm shields.\nClassic: the map's own look. Custom shields stay.", None),
+    ],
+}
 SCREENS["video_settings/fov_viewmodels"] = {
     "screen": "fov_viewmodel_settings_screen", "header": _video["header"], "spacing": 30,
     "rows": [

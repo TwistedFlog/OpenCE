@@ -126,6 +126,7 @@ symbols in this file:
 #include "units/units.h"
 #include "view_fov.h" /* port: port/linux/game/view_fov.c */
 #include "viewmodel_shield.h" /* port: port/linux/game/viewmodel_shield.c */
+#include "shield_look.h" /* port: port/linux/game/shield_look.c */
 
 /* ---------- constants */
 
@@ -557,8 +558,12 @@ void first_person_weapon_draw(
 						/* port: the unit's shield flare on the hands, as on its
 						body (display.viewmodel_shield); the weapon above is
 						drawn without it */
-						viewmodel_shield_apply(render.local_player_index, unit_index,
-							first_person_interface->hands.index, model_node_matrices, &model_effect);
+						/* port: ENHANCED supplies its own arm profile once; CLASSIC and
+						authored maps retain the existing Arm Shields behavior. */
+						if (!shield_look_arms(render.local_player_index, unit_index,
+							first_person_interface->hands.index, &model_effect))
+							viewmodel_shield_apply(render.local_player_index, unit_index,
+								first_person_interface->hands.index, model_node_matrices, &model_effect);
 						render_model(
 							first_person_interface->hands.index,
 							0.0f,
