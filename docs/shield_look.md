@@ -1,6 +1,6 @@
 # Shield Look
 
-Video Setup > SHIELD LOOK selects CLASSIC (the default) or ENHANCED.
+Video Setup > SHIELD LOOK selects CLASSIC (the default), ENHANCED or ENHANCED 2.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's body and first-person plasma parameters on stock Spartan
 shields. This is a local rendering feature in `port/linux/game/shield_look.c`.
@@ -45,7 +45,7 @@ compares their rendering fields byte-for-byte with the map):
 | Secondary period / direction | 3.2 / (0, 2, 0.5) | same |
 | Secondary scale | 14 | 62 |
 
-Do not replace source C with the hit-intensity source B: CMT has two object
+For the original ENHANCED profile, retain source C rather than B: CMT has two object
 functions, and its unused C output is zero. The original shader's offset
 parameters are deliberately retained. ENHANCED's arm values are separate
 from Arm Shields' values, so the latter's displacement cap does not alter
@@ -56,6 +56,22 @@ engine's modifier pass on the current map's hands.
 This preserves that map's geometry and animation. Controlled render
 comparisons on identical geometry are recorded below; the feature does not
 replace another map's models to make their silhouettes match CMT's.
+
+## ENHANCED 2
+
+`display.shield_look = "enhanced2"` (`HALO_SHIELD_LOOK=enhanced2`) retains
+ENHANCED's first-person shader exactly. Its body shader differs only in
+normal displacement: outgoing hit intensity B, exponent 0.5 and amount
+0.0125 world units. This starts small: at full intensity the outer layer is
+about 3.8 cm from the suit, shrinking with the square root of hit intensity.
+The CMT pattern, colors, animation and brightness remain unchanged. This is
+an intentional body-only variant, not part of the exact CMT reference.
+
+A separate stable body copy avoids changing shaders already queued for
+another view when switching modes. Both enhanced modes use the same
+conservative eligibility and map-unload cleanup. No new shared-engine hook,
+map-family adapter, geometry mutation or simulation change is needed: the
+existing plasma renderer already displaces vertices along their normals.
 
 ## Map authority and isolation
 
@@ -191,3 +207,21 @@ Both runs compared 22 seconds and passed the existing judge/tolerances
 (562 and 660 prediction-drift samples). A local adapter supplied Windows
 process handling and isolated file paths; the comparison logic was unchanged.
 This does not cover browser transport or internet matchmaking.
+
+ENHANCED 2 follow-up validation: 63 focused tests passed. Both enhanced
+settings exercise authored-shield refusal, malformed data, reloads, toggles
+and split-screen state. An additional real-module test compares the complete
+first-person shader byte-for-byte, checks that only the three body displacement
+fields differ, and verifies stable copies across all three settings. Release
+Windows, Android guest/host and web builds passed. Hidden Windows OpenGL
+runs on a bounded Beaver Creek fixture with scripted damage confirmed the
+small body separation at 1280x960; ENHANCED was also captured for comparison.
+The initial small offset was retained without increasing it. Existing Xbox,
+CE and MCC eligibility checks are unchanged; the previous family-specific
+live authority audits were not repeated for this displacement-only extension.
+Android/browser runtime and live split-screen remain untested.
+
+The ENHANCED 2 production build passed both host roles in the two-player
+Beaver Creek network comparison against CLASSIC, with damage/death events
+and real rendering (24 seconds compared per run, existing judge/tolerances).
+No networking implementation or version changed.

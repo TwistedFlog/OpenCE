@@ -240,8 +240,8 @@ _video["categories"] = [
 SCREENS["video_settings/shield_look"] = {
     "screen": "shield_look_settings_screen", "header": _video["header"], "spacing": 30,
     "rows": [
-        ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced")],
-         "Enhanced: CMT-style gold body and arm shields.\nClassic: the map's own look. Custom shields stay.", None),
+        ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced"), ("ENHANCED 2", "enhanced2")],
+         "Enhanced 2: a small outer flare on body shields.\nSame enhanced arms. Custom shields stay.", None),
     ],
 }
 SCREENS["video_settings/fov_viewmodels"] = {

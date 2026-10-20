@@ -56,9 +56,10 @@ def shield_tool(tmp_path_factory):
 
 @pytest.mark.parametrize("case", ["classic", "invalid-setting", "profiles", "authored-shader", "authored-noise",
                                   "authored-function", "authored-hands", "authored-body", "authored-decal", "missing", "split",
-                                  "toggle", "reload", "capacity", "malformed-noise"])
-def test_shield_look(shield_tool, case):
-    run = subprocess.run([str(shield_tool), case], capture_output=True, text=True, timeout=15)
+                                  "toggle", "outer", "reload", "capacity", "malformed-noise"])
+@pytest.mark.parametrize("look", ["enhanced", "enhanced2"])
+def test_shield_look(shield_tool, case, look):
+    run = subprocess.run([str(shield_tool), case, look], capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stdout + run.stderr
 
 
@@ -72,7 +73,7 @@ def test_menu_and_default():
     sys.path.insert(0, str(ROOT / "tools"))
     import port_settings
     spec = port_settings.SCREENS["video_settings/shield_look"]
-    assert spec["rows"][0][2] == [("CLASSIC", "classic"), ("ENHANCED", "enhanced")]
+    assert spec["rows"][0][2] == [("CLASSIC", "classic"), ("ENHANCED", "enhanced"), ("ENHANCED 2", "enhanced2")]
     config = (ROOT / "port/linux/src/port_config.c").read_text()
     assert re.search(r'"display.shield_look", _config_string, "\\"classic\\"", "HALO_SHIELD_LOOK"', config)
     for name, lines in port_settings.settings_files().items():

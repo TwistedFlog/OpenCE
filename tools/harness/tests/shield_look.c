@@ -148,6 +148,7 @@ int main(int argc, char **argv)
     real one = 1.f, rotation = 360.f;
     CHECK(argc >= 2);
     setup();
+    if (argc == 3) setting = argv[2];
     CHECK(shield_look_stock_shader(&stock));
     CHECK(shield_look_stock_function(&definition));
     if (!strcmp(argv[1], "light-reference")) {
@@ -240,6 +241,31 @@ int main(int argc, char **argv)
         CHECK(((struct shield_look_plasma *)body)->primary_map.index == 3);
         overshield = 1; CHECK(shield_look_arms(0, 0, 7, &effect)); CHECK(effect.modifier_animation.values[1] == 0.75f);
         CHECK(unit.object.outgoing_function_values[1] == 0.5f);
+    } else if (!strcmp(argv[1], "outer")) {
+        struct shield_look_plasma original_body, outer_body, original_arms;
+        struct shader *original_pointer, *outer_pointer;
+        setting = "enhanced";
+        original_pointer = shield_look_body(0, &stock.shader);
+        original_body = *(struct shield_look_plasma *)original_pointer;
+        CHECK(shield_look_arms(0, 0, 7, &effect));
+        original_arms = *(struct shield_look_plasma *)effect.modifier_shader;
+        setting = "enhanced2";
+        outer_pointer = shield_look_body(0, &stock.shader);
+        CHECK(outer_pointer != original_pointer);
+        outer_body = *(struct shield_look_plasma *)outer_pointer;
+        CHECK(outer_body.offset_source == 2 && outer_body.offset_amount == 0.0125f);
+        CHECK(outer_body.offset_exponent == 0.5f);
+        outer_body.offset_source = original_body.offset_source;
+        outer_body.offset_amount = original_body.offset_amount;
+        outer_body.offset_exponent = original_body.offset_exponent;
+        CHECK(!memcmp(&outer_body, &original_body, sizeof(outer_body)));
+        CHECK(shield_look_arms(0, 0, 7, &second));
+        CHECK(!memcmp(&original_arms, second.modifier_shader, sizeof(original_arms)));
+        CHECK(!memcmp(&original_body, original_pointer, sizeof(original_body)));
+        setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
+        CHECK(!shield_look_arms(0, 0, 7, &second));
+        setting = "enhanced2"; CHECK(shield_look_body(0, &stock.shader) == outer_pointer);
+        setting = "enhanced"; CHECK(shield_look_body(0, &stock.shader) == original_pointer);
     } else if (!strcmp(argv[1], "split")) {
         unit.object.outgoing_function_values[1] = 0.9f;
         CHECK(shield_look_arms(1, 0, 7, &second)); CHECK(second.modifier_animation.values != effect.modifier_animation.values);
@@ -248,7 +274,7 @@ int main(int argc, char **argv)
     } else if (!strcmp(argv[1], "toggle")) {
         setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
         CHECK(!shield_look_arms(0, 0, 7, &second));
-        setting = "enhanced"; CHECK(shield_look_body(0, &stock.shader) == body);
+        setting = argc == 3 ? argv[2] : "enhanced"; CHECK(shield_look_body(0, &stock.shader) == body);
     } else if (!strcmp(argv[1], "reload")) {
         shield_look_reset(); stock.primary_scale = 80.f;
         CHECK(shield_look_body(0, &stock.shader) == &stock.shader);

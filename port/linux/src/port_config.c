@@ -141,7 +141,8 @@ static const struct config_setting config_settings[] =
 	{ "display.shield_look", _config_string, "\"classic\"", "HALO_SHIELD_LOOK", _environment_value, _platform_all,
 		"Shield appearance: \"classic\" keeps the map's own look; \"enhanced\"\n"
 		"uses CMT-style gold body and first-person shields where stock Spartan\n"
-		"shields are recognized. Custom and unknown shields always keep their\n"
+		"shields are recognized. \"enhanced2\" adds a small body-only outer flare.\n"
+		"Custom and unknown shields always keep their\n"
 		"authored appearance. Local drawing only; independent of mods." },
 	{ "display.viewmodel_shield", _config_boolean, "false", "HALO_VIEWMODEL_SHIELD", _environment_value, _platform_all,
 		"The energy shield's flare on the first-person arms too, as on the body\n"
@@ -1505,7 +1506,7 @@ static const struct
 	{ "display.resolution_scaling", { "native", "original", NULL }, NULL },
 	{ "display.anti_aliasing", { "off", "fxaa", "smaa", "ssaa2x", "msaa2x", "msaa4x", "msaa8x", NULL }, NULL },
 	{ "display.hud_button_style", { "classic", "gems", "menu_gems", NULL }, NULL },
-	{ "display.shield_look", { "classic", "enhanced", NULL }, NULL },
+	{ "display.shield_look", { "classic", "enhanced", "enhanced2", NULL }, NULL },
 	{ "display.menus", { "pc", "xbox", NULL }, NULL },
 	{ "display.player_names", { "all", "allies", "enemies", "none", NULL }, NULL },
 	{ "display.scoreboard_team_layout", { "teams", "score", NULL }, NULL },
