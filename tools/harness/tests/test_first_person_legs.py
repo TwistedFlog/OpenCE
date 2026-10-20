@@ -21,7 +21,10 @@ CONTROLS = {
     # the upper body shrunk to nothing: its normals with no length
     "collapse-to-zero": (("pose[index].scale *= FIRST_PERSON_LEGS_COLLAPSE;", "pose[index].scale = 0.f;"), "legs"),
     # set back along the facing, tilted with it
-    "set-back-tilted": (("back.k = 0.f;", "back.k = -nodes[0].forward.k;"), "setback"),
+    "set-back-tilted": (("back.k = 0.f;", "back.k = -object->object.forward.k;"), "setback"),
+    # set back along the first node's axis (the old fault: the pelvis's, up the spine)
+    "first-node-facing": (("back.i = -object->object.forward.i;\n\tback.j = -object->object.forward.j;",
+                           "back.i = -nodes[0].forward.i;\n\tback.j = -nodes[0].forward.j;"), "setback"),
     # in third person too
     "third-person": (("director_get_perspective(local_player_index) != _director_perspective_first_person", "FALSE"),
                      "who"),

@@ -21,6 +21,7 @@ struct object_datum
 	struct
 	{
 		unsigned long flags;
+		real_vector3d forward;
 		short type;
 		word damage_flags;
 		long parent_object_index;
@@ -81,6 +82,7 @@ static void world(void)
 		objects[o].definition_index = 10 + o;
 		objects[o].object.type = _object_type_biped;
 		objects[o].object.parent_object_index = NONE;
+		objects[o].object.forward.i = 1;
 		objects[o].object.node_matrices.size = (short)(NODES * sizeof(real_matrix4x3));
 		definitions[o].object.model.index = 5;
 		definitions[o].biped.runtime_pelvis_node_index = PELVIS;
@@ -136,13 +138,19 @@ int main(int argc, char **argv)
 	}
 	CASE("setback") {
 		real_matrix4x3 const *pose;
-		node_matrices[0][FRAME].forward.i = 0.6f;
-		node_matrices[0][FRAME].forward.j = 0;
-		node_matrices[0][FRAME].forward.k = 0.8f; /* (a frame tilted: the set-back stays level) */
+		/* (the first node's axis up the spine, as a pelvis's is: not the body's facing) */
+		node_matrices[0][FRAME].forward.i = 0.1f;
+		node_matrices[0][FRAME].forward.j = 0.3f;
+		node_matrices[0][FRAME].forward.k = 0.95f;
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back),
+			"back from the object's facing, not its first node's");
+		objects[0].object.forward.i = 0.6f;
+		objects[0].object.forward.k = 0.8f; /* (a body tilted: the set-back stays level) */
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "level, the whole set-back");
-		node_matrices[0][FRAME].forward.i = 0;
-		node_matrices[0][FRAME].forward.k = 1;
+		objects[0].object.forward.i = 0;
+		objects[0].object.forward.k = 1;
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], 0), "no level facing, no set-back");
 	}

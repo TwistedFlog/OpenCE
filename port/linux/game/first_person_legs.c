@@ -270,9 +270,11 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 
 	nodes = object_get_node_matrices(object_index);
 	pose = first_person_legs_matrices[local_player_index];
-	/* (back from the body's own facing, level) */
-	back.i = -nodes[0].forward.i;
-	back.j = -nodes[0].forward.j;
+	/* (back from the body's own facing, level: the object's, which the
+	biped turns as its legs turn; not its first node's, which in the game's
+	characters is the pelvis, its axis up the spine) */
+	back.i = -object->object.forward.i;
+	back.j = -object->object.forward.j;
 	back.k = 0.f;
 	if (normalize3d(&back) <= 0.f)
 		back = *global_zero_vector3d;
@@ -299,3 +301,4 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	}
 	return pose;
 }
+
