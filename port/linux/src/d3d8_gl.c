@@ -817,7 +817,21 @@ static struct
 	BOOL sync_writes;
 	/* debug.gpu_range_draws: ES indexed draws give GL their index range */
 	BOOL range_draws;
+	/* debug.gpu_frame_orphan: ES gives the stream and index buffers new
+	storage at the start of each frame, as desktop does */
+	BOOL frame_orphan;
+	/* debug.gpu_upload_alignment: the room each streamed upload takes is
+	rounded up to this (a power of two, 16 by default) */
+	unsigned long upload_alignment;
 } debug_settings;
+
+/* the room an upload of size bytes takes in the stream or index buffer */
+static unsigned long upload_room(unsigned long size)
+{
+	unsigned long alignment = debug_settings.upload_alignment ? debug_settings.upload_alignment : 16;
+
+	return (size + alignment - 1) & ~(alignment - 1);
+}
 
 #ifdef HALO_GLES
 /* glDrawRangeElementsBaseVertex under the name the context has it, with
@@ -2023,6 +2037,15 @@ static void gl_initialize(void)
 	debug_settings.statistics = config_boolean("debug.gpu_stats");
 	debug_settings.sync_writes = config_boolean("debug.gpu_sync_writes");
 	debug_settings.range_draws = config_boolean("debug.gpu_range_draws");
+	debug_settings.frame_orphan = config_boolean("debug.gpu_frame_orphan");
+	{
+		long alignment = config_integer("debug.gpu_upload_alignment");
+
+		/* a power of two from 16 to 64 KB */
+		debug_settings.upload_alignment = 16;
+		while (debug_settings.upload_alignment < (unsigned long)alignment && debug_settings.upload_alignment < 65536)
+			debug_settings.upload_alignment *= 2;
+	}
 	nv2a_vsh_strict_position = config_boolean("debug.gpu_strict_position");
 	{
 		GLint renderbuffer_size = 0;
@@ -5048,7 +5071,7 @@ static unsigned long stream_upload(const void *data, unsigned long size);
 /* stream_upload, at a multiple of alignment into the buffer */
 static unsigned long stream_upload_aligned(const void *data, unsigned long size, unsigned long alignment)
 {
-	stream_reserve(((size + 15) & ~15UL) + alignment);
+	stream_reserve(upload_room(size) + alignment);
 	device.stream_offset += (alignment - device.stream_offset % alignment) % alignment;
 	return stream_upload(data, size);
 }
@@ -5060,7 +5083,7 @@ static unsigned long stream_upload(const void *data, unsigned long size)
 	/* (as index_upload: the vertices' own bytes, in room rounded up to 16) */
 	unsigned long length = size;
 
-	size = (size + 15) & ~15UL;
+	size = upload_room(size);
 	stream_reserve(size);
 	offset = device.stream_offset;
 	state_array_buffer(device.stream_buffer);
@@ -5129,7 +5152,7 @@ static unsigned long index_upload(const void *data, unsigned long size)
 	past the caller's indices) */
 	unsigned long length = size;
 
-	size = (size + 15) & ~15UL;
+	size = upload_room(size);
 #ifdef HALO_WEB
 	/* (as stream_reserve) */
 	if (device.index_offset + size > device.index_capacity ||
@@ -5441,7 +5464,7 @@ static void setup_streams(unsigned long first, unsigned long count)
 		if (mirror_range(base, bytes, &stream_buffers[stream], &stream_offsets[stream], NULL))
 			continue;
 		stream_buffers[stream] = 0;
-		total += (bytes + 15) & ~15UL;
+		total += upload_room(bytes);
 	}
 #ifdef HALO_WEB
 	{
@@ -6849,6 +6872,17 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		device.index_buffer = device.index_buffers[device.buffer_ring];
 		device.stream_offset = 0;
 		device.index_offset = 0;
+#if defined(HALO_GLES) && !defined(HALO_WEB)
+		/* debug.gpu_frame_orphan: new storage for the frame's uploads, so
+		none can land where an earlier frame's draws still read */
+		if (debug_settings.frame_orphan)
+		{
+			state_array_buffer(device.stream_buffer);
+			glBufferData(GL_ARRAY_BUFFER, STREAM_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
+			state_element_array_buffer(device.index_buffer);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, INDEX_BUFFER_SIZE, NULL, GL_STREAM_DRAW);
+		}
+#endif
 #ifdef HALO_WEB
 		web_chunks_begin_frame();
 #endif

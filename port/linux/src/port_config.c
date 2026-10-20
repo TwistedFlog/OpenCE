@@ -764,6 +764,12 @@ static const struct config_setting config_settings[] =
 	{ "debug.gpu_range_draws", _config_boolean, "false", "HALO_GPU_RANGE_DRAWS", _environment_set_is_true, _platform_all,
 		"OpenGL ES: give each indexed draw its index range\n"
 		"(glDrawRangeElements), for finding a drawing fault." },
+	{ "debug.gpu_frame_orphan", _config_boolean, "false", "HALO_GPU_FRAME_ORPHAN", _environment_set_is_true, _platform_all,
+		"OpenGL ES: give the stream and index buffers new storage each frame,\n"
+		"as desktop does (for finding a drawing fault)." },
+	{ "debug.gpu_upload_alignment", _config_integer, "16", "HALO_GPU_UPLOAD_ALIGNMENT", _environment_value, _platform_all,
+		"The bytes each streamed vertex or index upload is aligned to, a power\n"
+		"of two from 16 to 65536 (for finding a drawing fault)." },
 	{ "debug.gpu_strict_position", _config_boolean, "false", "HALO_GPU_STRICT_POSITION", _environment_set_is_true, _platform_all,
 		"Send vertices with an infinite or not-a-number position far outside\n"
 		"the view, so their triangles are clipped away (for finding a drawing fault)." },
