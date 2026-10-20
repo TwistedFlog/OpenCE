@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run
 
-CASES = ["off", "legs", "setback", "turn", "interpolated", "who", "unusable", "loops", "split", "reset"]
+CASES = ["off", "legs", "setback", "turn", "interpolated", "lidfov", "who", "unusable", "loops", "split", "reset"]
 CONTROLS = {
     # the setting ignored
     "always-on": (("if (!first_person_legs_enabled() || local_player_index", "if (local_player_index"), "off"),
@@ -18,6 +18,11 @@ CONTROLS = {
                         "legs"),
     # the upper body drawn onto the spine's joint, above the waist (a dome)
     "lid-at-spine": (("\t\t\tpose[index].position = lid;\n", ""), "legs"),
+    # the lid where it is at 90 degrees, whatever the view's field
+    "fixed-lid": (("lid_fraction = first_person_legs_lid(render.camera.vertical_field_of_view);",
+                   "lid_fraction = FIRST_PERSON_LEGS_LID;"), "lidfov"),
+    # the view's vertical angle taken for display.fov's, across at 16:9
+    "vertical-degrees": ((" * (16.0 / 9.0)", ""), "lidfov"),
     # the upper body shrunk to nothing: its normals with no length
     "collapse-to-zero": (("pose[index].scale *= FIRST_PERSON_LEGS_COLLAPSE;", "pose[index].scale = 0.f;"), "legs"),
     # the view's heading from its forward alone: none looking straight down
@@ -63,12 +68,13 @@ def generated(control=None):
     globals_ = source[source.index("/* ---------- globals */"):source.index("/* ---------- private code */")]
     code = "\n".join([enum_with(source, "FIRST_PERSON_LEGS_MODELS"),
                       define(source, "FIRST_PERSON_LEGS_SET_BACK"), define(source, "FIRST_PERSON_LEGS_COLLAPSE"),
-                      define(source, "FIRST_PERSON_LEGS_LID"),
+                      define(source, "FIRST_PERSON_LEGS_LID"), define(source, "FIRST_PERSON_LEGS_LID_FOV"),
                       "void first_person_legs_reset(void);", globals_] +
                      [function(source, name) for name in ["first_person_legs_enabled", "first_person_legs_below",
                                                           "first_person_legs_find", "first_person_legs_model_get",
                                                           "first_person_legs_reset", "first_person_legs_view_heading",
-                                                          "first_person_legs_body_heading", "first_person_legs_turn",
+                                                          "first_person_legs_body_heading", "first_person_legs_lid",
+                                                          "first_person_legs_turn",
                                                           "first_person_legs_node_matrices"]])
     if control:
         code = mutated(code, *CONTROLS[control][0])

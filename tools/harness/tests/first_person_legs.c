@@ -2,6 +2,9 @@
 #include "harness.h"
 #include <math.h>
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define PIN(x, lo, hi) MIN(MAX((x), (lo)), (hi))
+#define _pi ((real)3.14159265358979323846f)
 #define MAXIMUM_LOCAL_PLAYERS 4
 #define MAXIMUM_NODES_PER_MODEL 64
 #define TAG_BLOCK_GET_ELEMENT(block, index, type) (&((type *)(block)->address)[index])
@@ -68,7 +71,9 @@ static real_matrix4x3 *object_get_node_matrices(long index) { return node_matric
 static real_matrix4x3 tick_nodes[2][16];
 static void *object_header_block_get(long index, void *reference) { (void)reference; return tick_nodes[index]; }
 /* the view */
-static struct { struct { real_vector3d forward, up; } camera; } render;
+static struct { struct { real_vector3d forward, up; real vertical_field_of_view; } camera; } render;
+/* the vertical angle of a view this many degrees across at 16:9 */
+static real vertical_of(double degrees) { return (real)(2.0 * atan(tan(degrees * 3.14159265358979323846 / 360.0) * (9.0 / 16.0))); }
 static real dot_product3d(real_vector3d const *a, real_vector3d const *b) { return a->i * b->i + a->j * b->j + a->k * b->k; }
 #include "under_test.inc"
 
@@ -108,6 +113,7 @@ static void world(void)
 	memset(&render, 0, sizeof(render));
 	render.camera.forward.i = 1;
 	render.camera.up.k = 1;
+	render.camera.vertical_field_of_view = vertical_of(90.0);
 	perspective[0] = perspective[1] = _director_perspective_first_person;
 	setting = 1;
 	logs = 0;
@@ -207,6 +213,20 @@ int main(int argc, char **argv)
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && fabsf(pose[L_CALF].forward.i - 1.f) < 1e-5f && fabsf(pose[L_CALF].forward.j) < 1e-5f,
 			"the drawn body faces the view, whatever the tick's");
+	}
+	CASE("lidfov") {
+		/* (the pelvis at x 1, the spine at x 2: the lid's x is 1 and its share of the way) */
+		real_matrix4x3 const *pose;
+		real const fovs[3] = {90.f, 150.f, 45.f};
+		short f;
+		for (f = 0; f < 3; f++) {
+			real expected = 1.f + FIRST_PERSON_LEGS_LID * fovs[f] / FIRST_PERSON_LEGS_LID_FOV - FIRST_PERSON_LEGS_SET_BACK;
+			render.camera.vertical_field_of_view = vertical_of(fovs[f]);
+			pose = first_person_legs_node_matrices(0, 0);
+			CHECK(pose && fabsf(pose[HEAD].position.x - expected) < 1e-4f,
+				"at %g degrees across, the lid %g of the way up (%g, not %g)", fovs[f],
+				FIRST_PERSON_LEGS_LID * fovs[f] / FIRST_PERSON_LEGS_LID_FOV, pose ? pose[HEAD].position.x : 0, expected);
+		}
 	}
 	CASE("who") {
 		CHECK(!first_person_legs_node_matrices(0, 1), "another player's body");

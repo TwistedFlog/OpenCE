@@ -49,6 +49,8 @@ down, it is a little behind, as though the head leaned out over it.
 
 #include "first_person_legs.h"
 
+#include <math.h>
+
 enum
 {
 	FIRST_PERSON_LEGS_MODELS = 8,
@@ -58,9 +60,12 @@ enum
 its own level facing (tuned by eye) */
 #define FIRST_PERSON_LEGS_SET_BACK 0.06f
 /* where on the way from the pelvis's joint (0) to the spine's (1) the upper
-body is drawn: lower, the waist sinks into a funnel; higher, it stands up as
-a dome (tuned by eye) */
+body is drawn, at a field of view of FIRST_PERSON_LEGS_LID_FOV degrees
+across at 16:9 (display.fov's measure), and higher in proportion to a wider
+view's: lower, the waist sinks into a funnel; higher, it stands up as a
+dome (tuned by eye) */
 #define FIRST_PERSON_LEGS_LID 0.5f
+#define FIRST_PERSON_LEGS_LID_FOV 90.f
 /* the scale the upper body is drawn at on the waist: small enough that its
 skin is within a millimetre of the lid's point, not zero, which would
 leave its vertices' normals without a length to normalize */
@@ -250,6 +255,18 @@ static boolean first_person_legs_body_heading(
 	return normalize3d(heading) > 0.f;
 }
 
+/* where between the pelvis's joint and the spine's the upper body is drawn,
+for a view drawn at this vertical angle (radians) */
+static real first_person_legs_lid(
+	real vertical_field_of_view)
+{
+	/* (the view's angle across at 16:9, in degrees, as display.fov has it) */
+	real degrees = (real)(360.0 / _pi * atan(tan(0.5 * (double)vertical_field_of_view) * (16.0 / 9.0)));
+	real lid = FIRST_PERSON_LEGS_LID * degrees / FIRST_PERSON_LEGS_LID_FOV;
+
+	return PIN(lid, 0.f, 1.f);
+}
+
 /* a vector turned about the vertical by the angle whose cosine and sine
 these are */
 static void first_person_legs_turn(
@@ -290,6 +307,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	real_vector3d body;
 	real_vector3d back;
 	real_point3d lid;
+	real lid_fraction;
 	real_point3d pivot;
 	real cosine = 1.f;
 	real sine = 0.f;
@@ -347,9 +365,10 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		real_point3d const *spine = &nodes[legs->spine_node_index].position;
 		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;
 
-		lid.x = pelvis->x + (spine->x - pelvis->x) * FIRST_PERSON_LEGS_LID;
-		lid.y = pelvis->y + (spine->y - pelvis->y) * FIRST_PERSON_LEGS_LID;
-		lid.z = pelvis->z + (spine->z - pelvis->z) * FIRST_PERSON_LEGS_LID;
+		lid_fraction = first_person_legs_lid(render.camera.vertical_field_of_view);
+		lid.x = pelvis->x + (spine->x - pelvis->x) * lid_fraction;
+		lid.y = pelvis->y + (spine->y - pelvis->y) * lid_fraction;
+		lid.z = pelvis->z + (spine->z - pelvis->z) * lid_fraction;
 	}
 	for (index = 0; index < node_count; index++)
 	{
