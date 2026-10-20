@@ -17,19 +17,20 @@ and the head are the biped's own runtime nodes (the ones its autoaim pill
 uses). The pelvis's child on the way up to the head is the spine; the nodes
 below the pelvis but not below the spine are the legs. Everything else past
 the pelvis's own ancestors is drawn shrunk to nothing
-(FIRST_PERSON_LEGS_COLLAPSE) onto one point of the waist, part of the way
-from the pelvis's joint to the spine's (FIRST_PERSON_LEGS_LID), so the
-upper body's skin closes the waist as a low lid: the vertices blended
-between the hips and the spine are pulled in towards that point (onto the
-spine's joint, above the waist, they stood up as a dome). The model's
-geometry is never read.
+(FIRST_PERSON_LEGS_COLLAPSE) onto a fixed point halfway from the pelvis to
+the spine. The whole copied pose is set back far enough that this closure
+stays below the view even when looking straight down. Moving the whole
+pose preserves the waist's shape; stretching just the upper bones to an
+out-of-view point leaves a visible tapered connector. The model's geometry
+is never read.
 
 The pose is each local player's own (split-screen views draw their own
 bodies). It is turned about the hips from the body's facing to the view's:
 the game turns a standing body only once the aim is well away from it, and
 slowly, and one in the air not at all, so the legs drawn as they face would
 lag behind the view and, after a jump's turn, stand in front of it. It is
-set back a fixed distance behind the eye along the view's level facing, so
+set back along the view's level facing, by at least FIRST_PERSON_LEGS_SET_BACK.
+The clearance uses eye height and FOV, not the current look pitch, so
 the body stands still on the ground as the view turns up and down: looking
 down, it is a little behind, as though the head leaned out over it.
 */
@@ -59,13 +60,12 @@ enum
 /* how far behind the eye the body is drawn, world units (about 49 cm), along
 the view's level facing (tuned in-game) */
 #define FIRST_PERSON_LEGS_SET_BACK 0.16f
-/* where on the way from the pelvis's joint (0) to the spine's (1) the upper
-body is drawn, at a field of view of FIRST_PERSON_LEGS_LID_FOV degrees
-across at 16:9 (display.fov's measure), and higher in proportion to a wider
-view's: lower, the waist sinks into a funnel; higher, it stands up as a
-dome (tuned by eye) */
+/* the waist's closure, fixed between the pelvis and spine: changing its
+height with FOV deforms the body */
 #define FIRST_PERSON_LEGS_LID 0.5f
-#define FIRST_PERSON_LEGS_LID_FOV 90.f
+/* clearance outside the bottom view plane for the shrunken skin and its
+shield effect, world units */
+#define FIRST_PERSON_LEGS_CLIP_MARGIN 0.03f
 /* the scale the upper body is drawn at on the waist: small enough that its
 skin is within a millimetre of the lid's point, not zero, which would
 leave its vertices' normals without a length to normalize */
@@ -255,18 +255,6 @@ static boolean first_person_legs_body_heading(
 	return normalize3d(heading) > 0.f;
 }
 
-/* where between the pelvis's joint and the spine's the upper body is drawn,
-for a view drawn at this vertical angle (radians) */
-static real first_person_legs_lid(
-	real vertical_field_of_view)
-{
-	/* (the view's angle across at 16:9, in degrees, as display.fov has it) */
-	real degrees = (real)(360.0 / _pi * atan(tan(0.5 * (double)vertical_field_of_view) * (16.0 / 9.0)));
-	real lid = FIRST_PERSON_LEGS_LID * degrees / FIRST_PERSON_LEGS_LID_FOV;
-
-	return PIN(lid, 0.f, 1.f);
-}
-
 /* a vector turned about the vertical by the angle whose cosine and sine
 these are */
 static void first_person_legs_turn(
@@ -307,7 +295,7 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	real_vector3d body;
 	real_vector3d back;
 	real_point3d lid;
-	real lid_fraction;
+	real set_back = FIRST_PERSON_LEGS_SET_BACK;
 	real_point3d pivot;
 	real cosine = 1.f;
 	real sine = 0.f;
@@ -367,11 +355,30 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		real_point3d const *spine = &nodes[legs->spine_node_index].position;
 		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;
 
-		lid_fraction = first_person_legs_lid(render.camera.vertical_field_of_view);
-		lid.x = pelvis->x + (spine->x - pelvis->x) * lid_fraction;
-		lid.y = pelvis->y + (spine->y - pelvis->y) * lid_fraction;
-		lid.z = pelvis->z + (spine->z - pelvis->z) * lid_fraction;
+		lid.x = pelvis->x + (spine->x - pelvis->x) * FIRST_PERSON_LEGS_LID;
+		lid.y = pelvis->y + (spine->y - pelvis->y) * FIRST_PERSON_LEGS_LID;
+		lid.z = pelvis->z + (spine->z - pelvis->z) * FIRST_PERSON_LEGS_LID;
 	}
+	/* The most revealing pitch is straight down. At eye-to-waist height h,
+	the bottom edge reaches h*tan(v/2) behind the eye. Keep the closure
+	beyond it with a plane-normal margin; the default offset is a minimum.
+	Account for the drawn pose's existing offset from the camera, then apply
+	the same translation to every bone, including the pelvis and legs. */
+	{
+		real x = lid.x - pivot.x;
+		real y = lid.y - pivot.y;
+		real half_fov = render.camera.vertical_field_of_view * 0.5f;
+		real height = MAX(0.f, render.camera.position.z - lid.z);
+		real required = height * (real)tan((double)half_fov) +
+			FIRST_PERSON_LEGS_CLIP_MARGIN / (real)cos((double)half_fov);
+		real world_x = pivot.x + cosine * x - sine * y;
+		real world_y = pivot.y + sine * x + cosine * y;
+		real current = (render.camera.position.x - world_x) * view.i +
+			(render.camera.position.y - world_y) * view.j;
+
+		set_back = MAX(set_back, required - current);
+	}
+
 	for (index = 0; index < node_count; index++)
 	{
 		if (legs->collapsed[index])
@@ -386,8 +393,8 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 			real x = pose[index].position.x - pivot.x;
 			real y = pose[index].position.y - pivot.y;
 
-			pose[index].position.x = pivot.x + cosine * x - sine * y + back.i * FIRST_PERSON_LEGS_SET_BACK;
-			pose[index].position.y = pivot.y + sine * x + cosine * y + back.j * FIRST_PERSON_LEGS_SET_BACK;
+			pose[index].position.x = pivot.x + cosine * x - sine * y + back.i * set_back;
+			pose[index].position.y = pivot.y + sine * x + cosine * y + back.j * set_back;
 		}
 		first_person_legs_turn(&pose[index].forward, cosine, sine);
 		first_person_legs_turn(&pose[index].left, cosine, sine);
@@ -395,4 +402,3 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	}
 	return pose;
 }
-

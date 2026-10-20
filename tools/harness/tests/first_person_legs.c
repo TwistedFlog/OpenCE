@@ -71,7 +71,7 @@ static real_matrix4x3 *object_get_node_matrices(long index) { return node_matric
 static real_matrix4x3 tick_nodes[2][16];
 static void *object_header_block_get(long index, void *reference) { (void)reference; return tick_nodes[index]; }
 /* the view */
-static struct { struct { real_vector3d forward, up; real vertical_field_of_view; } camera; } render;
+static struct { struct { real_point3d position; real_vector3d forward, up; real vertical_field_of_view; } camera; } render;
 /* the vertical angle of a view this many degrees across at 16:9 */
 static real vertical_of(double degrees) { return (real)(2.0 * atan(tan(degrees * 3.14159265358979323846 / 360.0) * (9.0 / 16.0))); }
 static real dot_product3d(real_vector3d const *a, real_vector3d const *b) { return a->i * b->i + a->j * b->j + a->k * b->k; }
@@ -111,6 +111,9 @@ static void world(void)
 	memcpy(tick_nodes, node_matrices, sizeof(tick_nodes));
 	/* (looking ahead along +x, as the body faces) */
 	memset(&render, 0, sizeof(render));
+	/* Keep the closure outside the view for the basic pose tests. The
+	   clipping cases below place the eye close to the actual waist. */
+	render.camera.position.x = 10.f;
 	render.camera.forward.i = 1;
 	render.camera.up.k = 1;
 	render.camera.vertical_field_of_view = vertical_of(90.0);
@@ -174,14 +177,14 @@ int main(int argc, char **argv)
 		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "no turn: the body faces the view");
 	}
 	CASE("turn") {
-		/* (the body faces +x, the view +y: turned a quarter about the first node, the pelvis in the game's
-		characters, here at the origin; set back along -y) */
+		/* (the body faces +x, the view +y: turned about the pelvis, set back along -y) */
 		real_matrix4x3 const *pose;
 		/* (the first node's axis up the spine, as a pelvis's is) */
 		node_matrices[0][FRAME].forward.i = 0; node_matrices[0][FRAME].forward.k = 1;
 		node_matrices[0][FRAME].up.i = -1; node_matrices[0][FRAME].up.k = 0;
 		memcpy(tick_nodes[0], node_matrices[0], sizeof(tick_nodes[0]));
 		render.camera.forward.i = 0; render.camera.forward.j = 1;
+		render.camera.position.y = 10.f;
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose != NULL, "drawn");
 		CHECK(fabsf(pose[L_CALF].position.x - 1.f) < 1e-5f &&
@@ -194,6 +197,7 @@ int main(int argc, char **argv)
 		CHECK(fabsf(pose[L_CALF].up.k - 1.f) < 1e-5f, "about the vertical");
 		/* (a jump's half turn: the body still faces +x, the view -x) */
 		render.camera.forward.i = -1; render.camera.forward.j = 0;
+		render.camera.position.x = -10.f;
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && fabsf(pose[L_CALF].position.x - (-4.f + FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f,
 			"half turned, still ahead of the view, not behind it (%g)", pose ? pose[L_CALF].position.x : 0);
@@ -217,6 +221,8 @@ int main(int argc, char **argv)
 				real_point3d expected = node_matrices[0][pelvis].position;
 				render.camera.forward.i = headings[turn][0];
 				render.camera.forward.j = headings[turn][1];
+				render.camera.position.x = expected.x + headings[turn][0] * 10.f;
+				render.camera.position.y = expected.y + headings[turn][1] * 10.f;
 				expected.x -= headings[turn][0] * FIRST_PERSON_LEGS_SET_BACK;
 				expected.y -= headings[turn][1] * FIRST_PERSON_LEGS_SET_BACK;
 				pose = first_person_legs_node_matrices(0, 0);
@@ -250,18 +256,90 @@ int main(int argc, char **argv)
 			fabsf(pose[L_CALF].position.y - 0.2f) < 1e-5f,
 			"the interpolated pelvis anchors the turned pose, not the tick's pelvis or the root");
 	}
-	CASE("lidfov") {
-		/* (the pelvis at x 1, the spine at x 2: the lid's x is 1 and its share of the way) */
-		real_matrix4x3 const *pose;
-		real const fovs[3] = {90.f, 150.f, 45.f};
-		short f;
-		for (f = 0; f < 3; f++) {
-			real expected = 1.f + FIRST_PERSON_LEGS_LID * fovs[f] / FIRST_PERSON_LEGS_LID_FOV - FIRST_PERSON_LEGS_SET_BACK;
+	CASE("fov-shape") {
+		real_matrix4x3 baseline[NODES];
+		real const fovs[] = {20.f, 90.f, 110.f, 120.f, 150.f};
+		short f, i;
+		render.camera.position.x = 0.3f;
+		render.camera.position.y = -0.2f;
+		render.camera.position.z = 2.7f;
+		render.camera.vertical_field_of_view = vertical_of(20.f);
+		memcpy(baseline, first_person_legs_node_matrices(0, 0), sizeof(baseline));
+		for (f = 0; f < 5; f++) {
+			real_matrix4x3 const *pose;
+			real dx, dy;
 			render.camera.vertical_field_of_view = vertical_of(fovs[f]);
 			pose = first_person_legs_node_matrices(0, 0);
-			CHECK(pose && fabsf(pose[HEAD].position.x - expected) < 1e-4f,
-				"at %g degrees across, the lid %g of the way up (%g, not %g)", fovs[f],
-				FIRST_PERSON_LEGS_LID * fovs[f] / FIRST_PERSON_LEGS_LID_FOV, pose ? pose[HEAD].position.x : 0, expected);
+			CHECK(pose != NULL, "the legs remain drawn");
+			dx = pose[PELVIS].position.x - baseline[PELVIS].position.x;
+			dy = pose[PELVIS].position.y - baseline[PELVIS].position.y;
+			for (i = 0; i < NODES; i++) {
+				CHECK(fabsf(pose[i].position.x - baseline[i].position.x - dx) < 1e-4f &&
+					fabsf(pose[i].position.y - baseline[i].position.y - dy) < 1e-4f &&
+					pose[i].position.z == baseline[i].position.z &&
+					pose[i].scale == baseline[i].scale,
+					"FOV %g translates the whole pose without deforming node %d", fovs[f], i);
+			}
+		}
+	}
+	if (!strcmp(case_name, "junction") || !strcmp(case_name, "junction-crouch")) {
+		real const fovs[] = {20.f, 90.f, 110.f, 120.f, 150.f};
+		real const views[][6] = {
+			{1, 0, 0, 0, 0, 1}, {0.5f, 0, -0.8660254f, 0.8660254f, 0, 0.5f},
+			{0, 0, -1, 1, 0, 0}, {0, 0, 1, -1, 0, 0}, {0, 1, 0, 0, 0, 1}
+		};
+		short f, v, i;
+		render.camera.position.x = 0.3f;
+		render.camera.position.y = -0.2f;
+		render.camera.position.z = !strcmp(case_name, "junction-crouch") ? 1.7f : 2.7f;
+		for (f = 0; f < 5; f++) {
+			render.camera.vertical_field_of_view = vertical_of(fovs[f]);
+			for (v = 0; v < 5; v++) {
+				real_matrix4x3 const *pose;
+				render.camera.forward.i = views[v][0]; render.camera.forward.j = views[v][1];
+				render.camera.forward.k = views[v][2]; render.camera.up.i = views[v][3];
+				render.camera.up.j = views[v][4]; render.camera.up.k = views[v][5];
+				pose = first_person_legs_node_matrices(0, 0);
+				CHECK(pose != NULL, "the legs remain drawn at %g FOV", fovs[f]);
+				for (i = 0; i < NODES; i++) {
+					real_vector3d from_eye;
+					real depth, height;
+					if (i == FRAME || i == PELVIS || i == L_THIGH || i == L_CALF ||
+						i == R_THIGH || i == R_CALF)
+						continue;
+					from_eye.i = pose[i].position.x - render.camera.position.x;
+					from_eye.j = pose[i].position.y - render.camera.position.y;
+					from_eye.k = pose[i].position.z - render.camera.position.z;
+					depth = dot_product3d(&from_eye, &render.camera.forward);
+					height = dot_product3d(&from_eye, &render.camera.up);
+					CHECK(depth <= 0.f || height + depth * tan(render.camera.vertical_field_of_view * 0.5) < -0.01f,
+						"upper node %d stays below the view at FOV %g view %d (depth %g height %g)",
+						i, fovs[f], v, depth, height);
+				}
+				CHECK(memcmp(node_matrices, tick_nodes, sizeof(tick_nodes)) == 0, "world pose is untouched");
+			}
+		}
+	}
+	CASE("pitch-stable") {
+		real const views[][6] = {
+			{1, 0, 0, 0, 0, 1}, {0.5f, 0, -0.8660254f, 0.8660254f, 0, 0.5f},
+			{0, 0, -1, 1, 0, 0}, {0, 0, 1, -1, 0, 0}
+		};
+		real_matrix4x3 baseline[NODES];
+		short v;
+		render.camera.position.x = 0.3f;
+		render.camera.position.y = -0.2f;
+		render.camera.position.z = 2.7f;
+		render.camera.vertical_field_of_view = vertical_of(150.f);
+		memcpy(baseline, first_person_legs_node_matrices(0, 0), sizeof(baseline));
+		for (v = 0; v < 4; v++) {
+			real_matrix4x3 const *pose;
+			render.camera.forward.i = views[v][0]; render.camera.forward.j = views[v][1];
+			render.camera.forward.k = views[v][2]; render.camera.up.i = views[v][3];
+			render.camera.up.j = views[v][4]; render.camera.up.k = views[v][5];
+			pose = first_person_legs_node_matrices(0, 0);
+			CHECK(pose && memcmp(pose, baseline, sizeof(baseline)) == 0,
+				"looking up/down does not move or deform the body (view %d)", v);
 		}
 	}
 	CASE("who") {
@@ -312,7 +390,9 @@ int main(int argc, char **argv)
 	}
 	CASE("split") {
 		real_matrix4x3 const *first = first_person_legs_node_matrices(0, 0);
-		real_matrix4x3 const *second = first_person_legs_node_matrices(1, 1);
+		real_matrix4x3 const *second;
+		render.camera.position.x = 20.f;
+		second = first_person_legs_node_matrices(1, 1);
 		CHECK(first && second && first != second, "each view's own pose");
 		CHECK(same_place(&first[L_CALF], &node_matrices[0][L_CALF], back), "the first view keeps its body's pose");
 		CHECK(same_place(&second[L_CALF], &node_matrices[1][L_CALF], back), "the second its own");
