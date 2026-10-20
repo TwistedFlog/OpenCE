@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, enum_with, function, mutated, read, run
 
-CASES = ["off", "legs", "setback", "who", "unusable", "loops", "split", "reset"]
+CASES = ["off", "legs", "setback", "lookdown", "who", "unusable", "loops", "split", "reset"]
 CONTROLS = {
     # the setting ignored
     "always-on": (("if (!first_person_legs_enabled() || local_player_index", "if (local_player_index"), "off"),
@@ -20,6 +20,12 @@ CONTROLS = {
     "collapse-to-zero": (("pose[index].scale *= FIRST_PERSON_LEGS_COLLAPSE;", "pose[index].scale = 0.f;"), "legs"),
     # set back along the facing, tilted with it
     "set-back-tilted": (("back.k = 0.f;", "back.k = -nodes[0].forward.k;"), "setback"),
+    # a fixed set-back, whatever the view
+    "fixed-set-back": (("set_back = MAX(set_back, MAX(pelvis_needed, spine_needed));", ";"), "lookdown"),
+    # the spine's joint, which rises into the view first, left out
+    "spine-ignored": (("MAX(pelvis_needed, spine_needed)", "pelvis_needed"), "lookdown"),
+    # as far back as it takes
+    "uncapped": (("if (!(set_back <= FIRST_PERSON_LEGS_SET_BACK_MAXIMUM))", "if (FALSE)"), "lookdown"),
     # in third person too
     "third-person": (("director_get_perspective(local_player_index) != _director_perspective_first_person", "FALSE"),
                      "who"),
@@ -47,11 +53,13 @@ def generated(control=None):
     source = read("port/linux/game/first_person_legs.c")
     globals_ = source[source.index("/* ---------- globals */"):source.index("/* ---------- private code */")]
     code = "\n".join([enum_with(source, "FIRST_PERSON_LEGS_MODELS"),
-                      define(source, "FIRST_PERSON_LEGS_SET_BACK"), define(source, "FIRST_PERSON_LEGS_COLLAPSE"),
+                      *[define(source, name) for name in ["FIRST_PERSON_LEGS_SET_BACK", "FIRST_PERSON_LEGS_SET_BACK_MAXIMUM",
+                                                          "FIRST_PERSON_LEGS_WAIST", "FIRST_PERSON_LEGS_TOWARD_MINIMUM",
+                                                          "FIRST_PERSON_LEGS_COLLAPSE"]],
                       "void first_person_legs_reset(void);", globals_] +
                      [function(source, name) for name in ["first_person_legs_enabled", "first_person_legs_below",
                                                           "first_person_legs_find", "first_person_legs_model_get",
-                                                          "first_person_legs_reset",
+                                                          "first_person_legs_reset", "first_person_legs_set_back",
                                                           "first_person_legs_node_matrices"]])
     if control:
         code = mutated(code, *CONTROLS[control][0])

@@ -2,6 +2,7 @@
 #include "harness.h"
 #include <math.h>
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MAXIMUM_LOCAL_PLAYERS 4
 #define MAXIMUM_NODES_PER_MODEL 64
 #define TAG_BLOCK_GET_ELEMENT(block, index, type) (&((type *)(block)->address)[index])
@@ -34,6 +35,18 @@ enum { _director_perspective_first_person = 0, _director_perspective_third_perso
 
 static real_vector3d const zero_vector = {0, 0, 0};
 static real_vector3d const *global_zero_vector3d = &zero_vector;
+typedef struct { real_vector3d n; real d; } real_plane3d;
+static real dot_product3d(real_vector3d const *a, real_vector3d const *b) { return a->i * b->i + a->j * b->j + a->k * b->k; }
+static real plane3d_distance_to_point(real_plane3d const *plane, real_point3d const *p)
+{
+	return p->x * plane->n.i + p->y * plane->n.j + p->z * plane->n.k - plane->d;
+}
+static real distance3d(real_point3d const *a, real_point3d const *b)
+{
+	return sqrtf((a->x - b->x) * (a->x - b->x) + (a->y - b->y) * (a->y - b->y) + (a->z - b->z) * (a->z - b->z));
+}
+/* the view: its bottom plane (2), positive outside */
+static struct { struct { real_plane3d world_planes[6]; } frustum; } render;
 static real normalize3d(real_vector3d *v)
 {
 	real length = sqrtf(v->i * v->i + v->j * v->j + v->k * v->k);
@@ -93,6 +106,10 @@ static void world(void)
 			node_matrices[o][i].position.z = (real)i;
 		}
 	}
+	/* (looking ahead: the bottom of the view faces down, and setting the body back
+	does not move the waist out of it) */
+	memset(&render, 0, sizeof(render));
+	render.frustum.world_planes[2].n.k = -1;
 	perspective[0] = perspective[1] = _director_perspective_first_person;
 	setting = 1;
 	logs = 0;
@@ -140,6 +157,40 @@ int main(int argc, char **argv)
 		node_matrices[0][FRAME].forward.k = 1;
 		pose = first_person_legs_node_matrices(0, 0);
 		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], 0), "no level facing, no set-back");
+	}
+	CASE("lookdown") {
+		real_matrix4x3 const *pose;
+		real radius = FIRST_PERSON_LEGS_WAIST * 0.070710678f;
+		short i;
+		/* (a waist at the eye's feet: pelvis, spine a little ahead and above, hips 7 cm from the pelvis) */
+		for (i = 0; i < NODES; i++) {
+			node_matrices[0][i].position.x = 0;
+			node_matrices[0][i].position.y = 0;
+			node_matrices[0][i].position.z = 0.5f;
+		}
+		node_matrices[0][SPINE].position.x = 0.05f;
+		node_matrices[0][L_THIGH].position.y = 0.05f;
+		node_matrices[0][L_THIGH].position.z = 0.45f;
+		node_matrices[0][R_THIGH].position.y = -0.05f;
+		node_matrices[0][R_THIGH].position.z = 0.45f;
+		/* (looking down: the bottom of the view faces back, through the eye) */
+		render.frustum.world_planes[2].n.i = -1;
+		render.frustum.world_planes[2].n.k = 0;
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], -(0.05f + radius)),
+			"set back until the spine's sphere, the farther into the view, is out of it (%g)",
+			pose ? pose[L_CALF].position.x : 0);
+		render.frustum.world_planes[2].d = 1; /* (the waist far into the view) */
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], -FIRST_PERSON_LEGS_SET_BACK_MAXIMUM),
+			"no farther than the most");
+		render.frustum.world_planes[2].d = -1; /* (the waist well out of the view) */
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "no nearer than the least");
+		render.frustum.world_planes[2].n.i = 1; /* (looking up: back moves the waist into the view) */
+		render.frustum.world_planes[2].d = 0;
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "looking up, the least");
 	}
 	CASE("who") {
 		CHECK(!first_person_legs_node_matrices(0, 1), "another player's body");
