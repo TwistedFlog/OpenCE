@@ -25,10 +25,13 @@ spine's joint, above the waist, they stood up as a dome). The model's
 geometry is never read.
 
 The pose is each local player's own (split-screen views draw their own
-bodies), set back a fixed distance behind the eye along the body's own
-level facing, so the body stands still on the ground as the view turns up
-and down: looking down, it is a little behind, as though the head leaned
-out over it.
+bodies). It is turned about the hips from the body's facing to the view's:
+the game turns a standing body only once the aim is well away from it, and
+slowly, and one in the air not at all, so the legs drawn as they face would
+lag behind the view and, after a jump's turn, stand in front of it. It is
+set back a fixed distance behind the eye along the view's level facing, so
+the body stands still on the ground as the view turns up and down: looking
+down, it is a little behind, as though the head leaned out over it.
 */
 
 #include "cseries.h"
@@ -39,6 +42,8 @@ out over it.
 #include "objects/objects.h"
 #include "objects/object_definitions.h"
 #include "objects/object_types.h"
+#include "render/render.h"
+#include "render/render_cameras.h"
 #include "tag_files/tag_groups.h"
 #include "units/biped_definitions.h"
 
@@ -211,6 +216,53 @@ static struct first_person_legs_model const *first_person_legs_model_get(
 	return entry;
 }
 
+/* the way the view looks, level: its forward's level part, with its up's
+(which points the way the forward did) so that looking straight down or up
+it still has one; FALSE for none */
+static boolean first_person_legs_view_heading(
+	real_vector3d const *forward,
+	real_vector3d const *up,
+	real_vector3d *heading)
+{
+	heading->i = forward->i - forward->k * up->i;
+	heading->j = forward->j - forward->k * up->j;
+	heading->k = 0.f;
+	return normalize3d(heading) > 0.f;
+}
+
+/* the way the body faces, level, in the pose drawn: the object's facing (as
+the last tick turned it), taken into its first node's frame as that tick
+left it, and out of that node's frame as drawn (between ticks), so the body
+turns as smoothly as its pose; FALSE for none */
+static boolean first_person_legs_body_heading(
+	real_vector3d const *facing,
+	real_matrix4x3 const *tick_root,
+	real_matrix4x3 const *drawn_root,
+	real_vector3d *heading)
+{
+	real forward = dot_product3d(facing, &tick_root->forward);
+	real left = dot_product3d(facing, &tick_root->left);
+	real up = dot_product3d(facing, &tick_root->up);
+
+	heading->i = forward * drawn_root->forward.i + left * drawn_root->left.i + up * drawn_root->up.i;
+	heading->j = forward * drawn_root->forward.j + left * drawn_root->left.j + up * drawn_root->up.j;
+	heading->k = 0.f;
+	return normalize3d(heading) > 0.f;
+}
+
+/* a vector turned about the vertical by the angle whose cosine and sine
+these are */
+static void first_person_legs_turn(
+	real_vector3d *vector,
+	real cosine,
+	real sine)
+{
+	real i = vector->i;
+
+	vector->i = cosine * i - sine * vector->j;
+	vector->j = sine * i + cosine * vector->j;
+}
+
 /* ---------- public code */
 
 void first_person_legs_reset(
@@ -234,8 +286,13 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 	struct first_person_legs_model const *legs;
 	real_matrix4x3 const *nodes;
 	real_matrix4x3 *pose;
+	real_vector3d view;
+	real_vector3d body;
 	real_vector3d back;
 	real_point3d lid;
+	real_point3d pivot;
+	real cosine = 1.f;
+	real sine = 0.f;
 	long player_index;
 	short node_count;
 	short index;
@@ -270,14 +327,22 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 
 	nodes = object_get_node_matrices(object_index);
 	pose = first_person_legs_matrices[local_player_index];
-	/* (back from the body's own facing, level: the object's, which the
-	biped turns as its legs turn; not its first node's, which in the game's
-	characters is the pelvis, its axis up the spine) */
-	back.i = -object->object.forward.i;
-	back.j = -object->object.forward.j;
+	/* (turned from the body's facing, the object's, to the view's; not
+	from its first node's, which in the game's characters is the pelvis,
+	its axis up the spine) */
+	if (!first_person_legs_view_heading(&render.camera.forward, &render.camera.up, &view))
+		view = *global_zero_vector3d;
+	else if (first_person_legs_body_heading(&object->object.forward,
+		(real_matrix4x3 const *)object_header_block_get(object_index, &object->object.node_matrices),
+		&nodes[0], &body))
+	{
+		cosine = dot_product3d(&body, &view);
+		sine = body.i * view.j - body.j * view.i;
+	}
+	back.i = -view.i;
+	back.j = -view.j;
 	back.k = 0.f;
-	if (normalize3d(&back) <= 0.f)
-		back = *global_zero_vector3d;
+	pivot = nodes[0].position;
 	{
 		real_point3d const *spine = &nodes[legs->spine_node_index].position;
 		real_point3d const *pelvis = &nodes[definition->biped.runtime_pelvis_node_index].position;
@@ -296,8 +361,16 @@ real_matrix4x3 const *first_person_legs_node_matrices(
 		}
 		else
 			pose[index] = nodes[index];
-		pose[index].position.x += back.i * FIRST_PERSON_LEGS_SET_BACK;
-		pose[index].position.y += back.j * FIRST_PERSON_LEGS_SET_BACK;
+		{
+			real x = pose[index].position.x - pivot.x;
+			real y = pose[index].position.y - pivot.y;
+
+			pose[index].position.x = pivot.x + cosine * x - sine * y + back.i * FIRST_PERSON_LEGS_SET_BACK;
+			pose[index].position.y = pivot.y + sine * x + cosine * y + back.j * FIRST_PERSON_LEGS_SET_BACK;
+		}
+		first_person_legs_turn(&pose[index].forward, cosine, sine);
+		first_person_legs_turn(&pose[index].left, cosine, sine);
+		first_person_legs_turn(&pose[index].up, cosine, sine);
 	}
 	return pose;
 }

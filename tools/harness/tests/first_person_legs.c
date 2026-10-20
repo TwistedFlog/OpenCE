@@ -64,6 +64,12 @@ static struct object_datum *object_try_and_get(long index) { return index >= 0 &
 #define biped_definition_get(index) (&definitions[(index) - 10])
 static struct model *model_definition_get(long index) { (void)index; return &model; }
 static real_matrix4x3 *object_get_node_matrices(long index) { return node_matrices[index]; }
+/* the matrices as the last tick left them (object_get_node_matrices': between ticks) */
+static real_matrix4x3 tick_nodes[2][16];
+static void *object_header_block_get(long index, void *reference) { (void)reference; return tick_nodes[index]; }
+/* the view */
+static struct { struct { real_vector3d forward, up; } camera; } render;
+static real dot_product3d(real_vector3d const *a, real_vector3d const *b) { return a->i * b->i + a->j * b->j + a->k * b->k; }
 #include "under_test.inc"
 
 /* 0 frame; 1 pelvis; 2 spine, 3 spine1, 4 head, 9 clavicle; 5 l thigh, 6 l calf; 7 r thigh, 8 r calf; 10 a node
@@ -91,10 +97,17 @@ static void world(void)
 			memset(&node_matrices[o][i], 0, sizeof(real_matrix4x3));
 			node_matrices[o][i].scale = 1;
 			node_matrices[o][i].forward.i = 1;
+			node_matrices[o][i].left.j = 1;
+			node_matrices[o][i].up.k = 1;
 			node_matrices[o][i].position.x = 10.f * o + i;
 			node_matrices[o][i].position.z = (real)i;
 		}
 	}
+	memcpy(tick_nodes, node_matrices, sizeof(tick_nodes));
+	/* (looking ahead along +x, as the body faces) */
+	memset(&render, 0, sizeof(render));
+	render.camera.forward.i = 1;
+	render.camera.up.k = 1;
 	perspective[0] = perspective[1] = _director_perspective_first_person;
 	setting = 1;
 	logs = 0;
@@ -138,21 +151,62 @@ int main(int argc, char **argv)
 	}
 	CASE("setback") {
 		real_matrix4x3 const *pose;
-		/* (the first node's axis up the spine, as a pelvis's is: not the body's facing) */
-		node_matrices[0][FRAME].forward.i = 0.1f;
-		node_matrices[0][FRAME].forward.j = 0.3f;
-		node_matrices[0][FRAME].forward.k = 0.95f;
+		/* (looking 60 degrees down, straight down, straight up: the view's heading, level, each time) */
+		real const views[3][6] = {{0.5f, 0, -0.8660254f, 0.8660254f, 0, 0.5f}, {0, 0, -1, 1, 0, 0}, {0, 0, 1, -1, 0, 0}};
+		short v;
+		for (v = 0; v < 3; v++) {
+			render.camera.forward.i = views[v][0]; render.camera.forward.j = views[v][1]; render.camera.forward.k = views[v][2];
+			render.camera.up.i = views[v][3]; render.camera.up.j = views[v][4]; render.camera.up.k = views[v][5];
+			pose = first_person_legs_node_matrices(0, 0);
+			CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "the whole set-back, level (view %d)", v);
+		}
+		/* (the first node's axis up the spine, as a pelvis's is: the body's facing is the object's) */
+		node_matrices[0][FRAME].forward.i = 0; node_matrices[0][FRAME].forward.k = 1;
+		node_matrices[0][FRAME].up.i = -1; node_matrices[0][FRAME].up.k = 0;
+		memcpy(tick_nodes[0], node_matrices[0], sizeof(tick_nodes[0]));
 		pose = first_person_legs_node_matrices(0, 0);
-		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back),
-			"back from the object's facing, not its first node's");
-		objects[0].object.forward.i = 0.6f;
-		objects[0].object.forward.k = 0.8f; /* (a body tilted: the set-back stays level) */
+		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "no turn: the body faces the view");
+	}
+	CASE("turn") {
+		/* (the body faces +x, the view +y: turned a quarter about the first node, the pelvis in the game's
+		characters, here at the origin; set back along -y) */
+		real_matrix4x3 const *pose;
+		/* (the first node's axis up the spine, as a pelvis's is) */
+		node_matrices[0][FRAME].forward.i = 0; node_matrices[0][FRAME].forward.k = 1;
+		node_matrices[0][FRAME].up.i = -1; node_matrices[0][FRAME].up.k = 0;
+		memcpy(tick_nodes[0], node_matrices[0], sizeof(tick_nodes[0]));
+		render.camera.forward.i = 0; render.camera.forward.j = 1;
 		pose = first_person_legs_node_matrices(0, 0);
-		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], back), "level, the whole set-back");
-		objects[0].object.forward.i = 0;
-		objects[0].object.forward.k = 1;
+		CHECK(pose != NULL, "drawn");
+		CHECK(fabsf(pose[L_CALF].position.x) < 1e-5f &&
+			fabsf(pose[L_CALF].position.y - (6.f - FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f &&
+			fabsf(pose[L_CALF].position.z - 6.f) < 1e-5f,
+			"a calf 6 ahead is 6 to the view's side, set back from the view (%g %g)",
+			pose[L_CALF].position.x, pose[L_CALF].position.y);
+		CHECK(fabsf(pose[L_CALF].forward.i) < 1e-5f && fabsf(pose[L_CALF].forward.j - 1.f) < 1e-5f,
+			"its axes turned with it");
+		CHECK(fabsf(pose[L_CALF].up.k - 1.f) < 1e-5f, "about the vertical");
+		/* (a jump's half turn: the body still faces +x, the view -x) */
+		render.camera.forward.i = -1; render.camera.forward.j = 0;
 		pose = first_person_legs_node_matrices(0, 0);
-		CHECK(pose && same_place(&pose[L_CALF], &node_matrices[0][L_CALF], 0), "no level facing, no set-back");
+		CHECK(pose && fabsf(pose[L_CALF].position.x - (-6.f + FIRST_PERSON_LEGS_SET_BACK)) < 1e-5f,
+			"half turned, still ahead of the view, not behind it (%g)", pose ? pose[L_CALF].position.x : 0);
+	}
+	CASE("interpolated") {
+		/* (between ticks the drawn pose has turned 30 degrees on from the tick's: the body's facing goes with it) */
+		real_matrix4x3 const *pose;
+		real const c = 0.8660254f, s = 0.5f;
+		short i;
+		for (i = 0; i < NODES; i++) {
+			real x = node_matrices[0][i].position.x - 1.f, y = node_matrices[0][i].position.y;
+			node_matrices[0][i].position.x = 1.f + c * x - s * y;
+			node_matrices[0][i].position.y = s * x + c * y;
+			node_matrices[0][i].forward.i = c; node_matrices[0][i].forward.j = s;
+			node_matrices[0][i].left.i = -s; node_matrices[0][i].left.j = c;
+		}
+		pose = first_person_legs_node_matrices(0, 0);
+		CHECK(pose && fabsf(pose[L_CALF].forward.i - 1.f) < 1e-5f && fabsf(pose[L_CALF].forward.j) < 1e-5f,
+			"the drawn body faces the view, whatever the tick's");
 	}
 	CASE("who") {
 		CHECK(!first_person_legs_node_matrices(0, 1), "another player's body");
