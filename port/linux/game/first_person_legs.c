@@ -56,9 +56,9 @@ enum
 	FIRST_PERSON_LEGS_MODELS = 8,
 };
 
-/* how far behind the eye the body is drawn, world units (about 18 cm), along
-its own level facing (tuned by eye) */
-#define FIRST_PERSON_LEGS_SET_BACK 0.06f
+/* how far behind the eye the body is drawn, world units (about 49 cm), along
+the view's level facing (tuned in-game) */
+#define FIRST_PERSON_LEGS_SET_BACK 0.16f
 /* where on the way from the pelvis's joint (0) to the spine's (1) the upper
 body is drawn, at a field of view of FIRST_PERSON_LEGS_LID_FOV degrees
 across at 16:9 (display.fov's measure), and higher in proportion to a wider
