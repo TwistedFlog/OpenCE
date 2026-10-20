@@ -40,6 +40,7 @@ symbols in this file:
 #include <xtl.h>
 #include "rasterizer/xbox/rasterizer_xbox_pixel_shader.h"
 #include "rasterizer/rasterizer_console_vars.h"
+#include "viewmodel_shield.h" /* port: port/linux/game/viewmodel_shield.c */
 
 /* ---------- constants */
 
@@ -198,6 +199,10 @@ void rasterizer_plasma_energy_draw(
 					offset = (real)pow(
 						(double)runtime->exponents[source - 1],
 						(double)plasma->offset_exponent) * plasma->offset_amount;
+				/* port: cap the final displacement on the first-person
+				arms, after the authored function and exponent scale it
+				(display.viewmodel_shield); other plasma keeps its own. */
+				offset = viewmodel_shield_offset_amount(runtime->exponents, offset);
 			}
 		}
 

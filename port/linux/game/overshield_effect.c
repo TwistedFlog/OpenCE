@@ -12,6 +12,8 @@ Overshield, display.overshield_effect; off, the game's own):
   (its hits, its recharge) are not drawn over it.
 - The flare's energy moves at 30% of its speed, in the overshield's own
   color (the powerup's).
+- On the first-person arms (with display.viewmodel_shield,
+  viewmodel_shield.c) it comes up as the rise passes them, and stays.
 - A hit on it plays what a hit on an Elite's shield plays (the hitting
   projectile's own effect for an Elite's energy shield: its sound, sparks
   and light), when the map has it.
@@ -61,6 +63,11 @@ from a down one (the charge's own times: 2 and 3 of shield a second) */
 #define OVERSHIELD_EFFECT_ENERGY_SPEED 0.3f
 /* the soft edge, as a share of the body's height */
 #define OVERSHIELD_EFFECT_EDGE 0.12f
+/* where on the rise the arms come up (the chest and shoulders: the rise
+counts from the edge below the feet to the edge over the head), and over
+how much of it */
+#define OVERSHIELD_EFFECT_ARMS_START 0.55f
+#define OVERSHIELD_EFFECT_ARMS_LENGTH 0.3f
 /* effects.c's _effect_definition_must_be_deterministic_bit, of an effect
 definition's flags (its enum is effects.c's own) */
 #define EFFECT_MUST_BE_DETERMINISTIC_BIT 1
@@ -84,6 +91,9 @@ struct overshield_effect
 	/* the values the unit's modifier shader is drawn with, its intensity's
 	full */
 	real body_values[4];
+	/* the first-person arms' copy, which viewmodel_shield.c keeps (NULL:
+	none) */
+	real const *arms_values;
 	/* this frame's: how far up (0..1, eased), and the model's heights */
 	real progress;
 	real bottom;
@@ -249,6 +259,7 @@ static struct overshield_effect *overshield_effect_get(
 			return NULL;
 		effect = free_effect;
 		effect->unit_index = unit_index;
+		effect->arms_values = NULL;
 		effect->rise = charging && shield <= OVERSHIELD_EFFECT_DOWN ?
 			OVERSHIELD_EFFECT_RISE_FROM_DOWN : OVERSHIELD_EFFECT_RISE;
 		/* (seen part of the way through its charge: as far on; seen charged,
@@ -309,10 +320,42 @@ real const *overshield_effect_values(
 	return copy;
 }
 
-/* a plasma shader drawn with values from overshield_effect_values: the
-speed its energy moves at, and the height it fades above on its model (the
-fade's inverse softness and height: 0 and 0 for none); FALSE for values not
-from it */
+/* the values a unit's first-person arms' modifier shader is drawn with,
+given its own, written to arms (viewmodel_shield.c's copy): with an
+overshield, its intensity coming up as the rise passes the arms, and TRUE
+(overshield_effect_draw then knows arms again); otherwise FALSE, and arms
+not written */
+boolean overshield_effect_arms_values(
+	long unit_index,
+	real const *values,
+	real *arms)
+{
+	struct overshield_effect *effect;
+	short source;
+	short index;
+
+	/* (another unit's overshield no longer draws on these arms) */
+	for (index = 0; index < OVERSHIELD_EFFECT_MAXIMUM; index++)
+	{
+		if (overshield_effects[index].arms_values == arms)
+			overshield_effects[index].arms_values = NULL;
+	}
+	if (!values || !overshield_effect_enabled())
+		return FALSE;
+	effect = overshield_effect_get(unit_index);
+	source = effect ? overshield_effect_intensity_source(unit_index) : NONE;
+	if (!effect || source == NONE)
+		return FALSE;
+	csmemcpy(arms, values, sizeof(effect->body_values));
+	arms[source] = PIN((effect->progress - OVERSHIELD_EFFECT_ARMS_START) / OVERSHIELD_EFFECT_ARMS_LENGTH, 0.f, 1.f);
+	effect->arms_values = arms;
+	return TRUE;
+}
+
+/* a plasma shader drawn with values from overshield_effect_values (or
+overshield_effect_arms_values, with no fade): the speed its energy moves
+at, and the height it fades above on its model (the fade's inverse softness
+and height: 0 and 0 for none); FALSE for values not from it */
 boolean overshield_effect_draw(
 	real const *values,
 	real *energy_speed,
@@ -327,12 +370,13 @@ boolean overshield_effect_draw(
 	{
 		struct overshield_effect const *effect = &overshield_effects[index];
 
-		if (effect->unit_index == NONE || values != effect->body_values)
+		if (effect->unit_index == NONE || (values != effect->body_values && values != effect->arms_values))
 			continue;
 		*energy_speed = OVERSHIELD_EFFECT_ENERGY_SPEED;
 		*inverse_softness = 0.f;
 		*height = 0.f;
-		if (effect->top > effect->bottom && effect->progress < 1.f)
+		/* (the arms come up whole: they are not on the body's heights) */
+		if (values == effect->body_values && effect->top > effect->bottom && effect->progress < 1.f)
 		{
 			real edge = OVERSHIELD_EFFECT_EDGE * (effect->top - effect->bottom);
 
@@ -386,7 +430,8 @@ boolean overshield_effect_hit_effect_allowed(
 }
 
 /* the color a plasma shader drawn with values from overshield_effect_values
-is drawn in, the overshield's own; FALSE for values not from it */
+(or overshield_effect_arms_values) is drawn in, the overshield's own; FALSE
+for values not from it */
 boolean overshield_effect_color(
 	real const *values,
 	real_rgb_color *perpendicular,
