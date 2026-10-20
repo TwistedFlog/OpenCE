@@ -195,13 +195,14 @@ void rasterizer_plasma_energy_draw(
 						(double)runtime->exponents[source - 1],
 						(double)plasma->intensity_exponent);
 				source = plasma->offset_exponent_source;
-				/* port: on the first-person arms, kept close to them
-				(display.viewmodel_shield); anything else's, its own */
 				if (source >= 1 && source <= 4)
 					offset = (real)pow(
 						(double)runtime->exponents[source - 1],
-						(double)plasma->offset_exponent) *
-						viewmodel_shield_offset_amount(runtime->exponents, plasma->offset_amount);
+						(double)plasma->offset_exponent) * plasma->offset_amount;
+				/* port: cap the final displacement on the first-person
+				arms, after the authored function and exponent scale it
+				(display.viewmodel_shield); other plasma keeps its own. */
+				offset = viewmodel_shield_offset_amount(runtime->exponents, offset);
 			}
 		}
 
