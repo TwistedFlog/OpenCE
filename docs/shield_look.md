@@ -279,3 +279,27 @@ The final production Windows executable passed both host roles in the
 Beaver Creek two-player comparison with CLASSIC versus ENHANCED, Arm Shields
 ON for both, scripted damage/deaths and real rendering (24 seconds compared
 per run, unchanged judge/tolerances). No network protocol or version changed.
+
+## Animated overshield layer colours
+
+Visible Overshields remains independently optional. It now follows the
+unit's current shield vitality: above 2.0 it is green (78, 253, 116), and
+through 2.0 it is reddish-pink (253, 78, 116). The existing charging rise
+remains active while charging; once charging is over, the persistent effect
+ends at normal shield strength (1.0). Body and arm draws use the same
+per-unit layer snapshot. First-person animation additionally requires Arm
+Shields. Original shader brightness, animation speed and geometry are retained.
+
+The layer selection and snapshot live entirely in `overshield_effect.c`.
+No source hook, map-family adapter, network message or gameplay value changed.
+66 focused tests passed, including actual effect-state refresh, exact 2.0
+boundary, charge/drain direction, body/arm colour agreement, brightness,
+expired/dead units and both setting guards. Windows, Android guest/host and
+web release builds passed. Hidden Windows OpenGL runs used a real overshield
+pickup in a bounded Beaver Creek fixture: logged shields charged through
+1.97 to 2.97, then scripted damage reduced 2.91 to 1.29. Captures confirmed
+green then reddish-pink on body and arms, and the effect ended when shields
+were exhausted. Arm Shields OFF kept the arms clear; Visible Overshields
+OFF also removed the persistent first-person effect at full charge. Original maps/saves
+were untouched. Android/browser gameplay, CE/MCC live maps, live split-screen
+and network sessions were not repeated for this visual-only colour change.

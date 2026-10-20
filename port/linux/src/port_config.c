@@ -423,7 +423,8 @@ static const struct config_setting config_settings[] =
 	{ "display.overshield_effect", _config_boolean, "false", "HALO_OVERSHIELD_EFFECT", _environment_value, _platform_all,
 		"The overshield as this machine draws it: its flare rising up the body as\n"
 		"it charges (2 seconds, 3 from a shield that was down) and staying lit,\n"
-		"its energy slower, in its own color (the powerup's); a hit on it plays\n"
+		"its energy slower: green above 200% shields, reddish-pink below.\n"
+		"Arms also require Arm Shields. A hit on it plays\n"
 		"what the projectile plays on an Elite's shield. Only what is drawn\n"
 		"and heard changes." },
 
