@@ -100,9 +100,6 @@ NORMPACKED3 32-bit integers and unpacked in the shader. With lighting (else
 NULL), the normal and world position go to the pixel shader too, which
 lights the diffuse color for each pixel (nv2a_pixel_shader_key
 per_pixel_lighting). Returns a malloc'd string. */
-/* debug.gpu_strict_position (d3d8_gl.c): also send positions with any
-coordinate infinite or not a number far outside the clip volume */
-extern int nv2a_vsh_strict_position;
 char *nv2a_vertex_shader_to_glsl(const DWORD *instructions, unsigned long instruction_count,
 	unsigned long packed_attribute_mask, const struct nv2a_vertex_lighting *lighting);
 /* the fixed-function pipeline's vertex shader (the loading screen's draws):
