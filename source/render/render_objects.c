@@ -112,6 +112,7 @@ symbols in this file:
 #include "saved games/game_state.h"
 #include "rasterizer/rasterizer_console_vars.h"
 #include "rasterizer/rasterizer_model_types.h"
+#include "first_person_legs.h" /* port: port/linux/game/first_person_legs.c */
 
 /* ---------- constants */
 
@@ -473,8 +474,14 @@ static void render_object_list(
 	while (object_index != NONE)
 	{
 		struct object_datum *object = object_get(object_index);
+		/* port: the player's own body in its first-person view, from the
+		waist down (display.first_person_legs); nothing it carries or wears */
+		real_matrix4x3 const *legs_node_matrices =
+			!data->shadow && !render.camera.mirrored && object_is_first_person_camera(object_index) ?
+				first_person_legs_node_matrices(render.local_player_index, object_index) :
+				NULL;
 
-		if (!object_is_first_person_camera(object_index) || render.camera.mirrored)
+		if (!object_is_first_person_camera(object_index) || render.camera.mirrored || legs_node_matrices)
 		{
 			struct render_model_effect model_effect;
 
@@ -609,7 +616,7 @@ static void render_object_list(
 					render_model(
 						definition->object.model.index,
 						level_of_detail_pixels,
-						object_get_node_matrices(object_index),
+						legs_node_matrices ? legs_node_matrices : object_get_node_matrices(object_index), /* port: (the legs' pose) */
 						object->object.region_permutations,
 						object->object.outgoing_change_colors,
 						object->object.outgoing_function_values,
@@ -645,7 +652,7 @@ static void render_object_list(
 				}
 			}
 
-			if (!data->shadow && object->object.first_widget_index != NONE)
+			if (!data->shadow && !legs_node_matrices && object->object.first_widget_index != NONE) /* port: (not with the legs) */
 			{
 				struct render_animation animation;
 
@@ -654,7 +661,7 @@ static void render_object_list(
 				widgets_render(object_index, data->lighting, &animation);
 			}
 
-			if (object->object.first_child_object_index != NONE)
+			if (object->object.first_child_object_index != NONE && !legs_node_matrices) /* port: (nor these) */
 			{
 				render_object_list(
 					data,

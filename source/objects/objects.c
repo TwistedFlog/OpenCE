@@ -60,6 +60,8 @@ OBJECTS.C
 #include "units/units.h"
 /* port: object_bounds_cache.c's */
 void object_bounds_cache_update(long object_index, real_point3d const *center, real radius);
+/* port: port/linux/game/first_person_legs.c's */
+void first_person_legs_reset(void);
 
 /* ---------- constants */
 
@@ -1078,6 +1080,7 @@ void objects_initialize_for_new_map(
 	widgets_initialize_for_new_map();
 	object_types_initialize_for_new_map();
 	lights_initialize_for_new_map();
+	first_person_legs_reset(); /* port: (the last map's legs forgotten) */
 	
 	data_make_valid(object_header_data);
 	object_name_list_clear();
@@ -1103,6 +1106,7 @@ void objects_dispose_from_old_map(
 	widgets_dispose_from_old_map();
 	object_types_dispose_from_old_map();
 	lights_dispose_from_old_map();
+	first_person_legs_reset(); /* port: (and on a failed load's way out) */
 
 	if (object_header_data->valid)
 	{
