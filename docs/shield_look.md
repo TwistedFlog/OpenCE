@@ -1,7 +1,7 @@
 # Shield Look
 
 Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default),
-ENHANCED, CLASSIC WITH SPRINKLES or HONEYCOMB. The former ENHANCED 2 profile
+CLASSIC WITH SPRINKLES, ENHANCED or ENHANCED HONEYCOMB, in that order. The former ENHANCED 2 profile
 is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
@@ -676,7 +676,7 @@ scripts remain under `build/shield-retreat`, with required platform builds
 and toolchains retained. Original maps and user saves were untouched.
 
 
-## HONEYCOMB
+## ENHANCED HONEYCOMB
 
 `display.shield_look = "honeycomb"` (or `HALO_SHIELD_LOOK=honeycomb`)
 selects a newly authored procedural surface inspired by the user's Infinite

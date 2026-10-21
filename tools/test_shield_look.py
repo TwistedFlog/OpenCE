@@ -65,7 +65,7 @@ def test_menu_and_default():
     import port_settings
     spec = port_settings.SCREENS["video_settings/fov_viewmodels"]
     row = next(row for row in spec["rows"] if row[1] == "display.shield_look")
-    assert row[2] == [("CLASSIC", "classic"), ("ENHANCED", "enhanced"), ("CLASSIC WITH SPRINKLES", "classic_with_sprinkles"), ("HONEYCOMB", "honeycomb")]
+    assert row[2] == [("CLASSIC", "classic"), ("CLASSIC WITH SPRINKLES", "classic_with_sprinkles"), ("ENHANCED", "enhanced"), ("ENHANCED HONEYCOMB", "honeycomb")]
     assert "video_settings/shield_look" not in port_settings.SCREENS
     assert not list((ROOT / "port/assets/menus/ce").glob("*.shield_look.xml"))
     assert "video_settings.shield_look.xml" not in (ROOT / "port/assets/menus/menus.json").read_text()
