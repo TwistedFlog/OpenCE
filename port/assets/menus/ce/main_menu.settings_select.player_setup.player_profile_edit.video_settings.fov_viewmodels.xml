@@ -65,11 +65,11 @@
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/op_shield_look" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
 		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_label"/>
-		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_spinner" x="320" y="1"/>
+		<child widget="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_spinner" x="240" y="1"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_label" type="text" controller="1" width="300" height="22" string_list="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/labels" string_index="4" font="ui\large_ui" color="#FF2896FF" text_x="13" text_y="4">
 	</widget>
-	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_spinner" type="spinner" left="3" top="2" width="147" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="CLASSIC|ENHANCED" setting="display.shield_look" values="classic|enhanced" font="ui\large_ui" color="#FF2896FF" align="center" text_y="1" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -6 19 0" footer_bounds="7 150 19 156">
+	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/shield_look_spinner" type="spinner" top="2" width="252" height="20" flags="pass_unhandled_to_focused_child left_right_tabs_items" strings="CLASSIC|ENHANCED|CLASSIC WITH SPRINKLES" setting="display.shield_look" values="classic|enhanced|classic_with_sprinkles" font="ui\large_ui" color="#FF2896FF" align="center" text_y="4" header_bitmap="bitmaps/arrow_sm_left" footer_bitmap="bitmaps/arrow_sm_right" header_bounds="7 -13 19 -7" footer_bounds="7 254 19 260">
 		<on event="created" run="port setting load"/>
 	</widget>
 	<widget name="main_menu/settings_select/player_setup/player_profile_edit/video_settings/fov_viewmodels/op_viewmodel_shield" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
@@ -115,7 +115,7 @@
 		<string text="The weapon and hands, horizontal at 16:9.\nDefault keeps the weapon's stock view."/>
 		<string text="Draw first-person weapons, hands and attached\nvisuals. Gameplay and sound continue when off."/>
 		<string text="Third-person Warthog and Scorpion passengers in\nthe campaign and co-op. Weapon zoom is disabled."/>
-		<string text="Classic keeps map shields. Enhanced keeps custom colour.\nArm Shields controls the enhanced first-person layer."/>
+		<string text="Classic keeps map shields. Other looks keep custom colour.\nSprinkles adds layers, arcs and recharge to the classic surface."/>
 		<string text="The energy shield's flare on your first-person\narms too, as on your body."/>
 		<string text="Your legs in first person, seen looking down,\nmoving as you run. Your body as others see it."/>
 	</strings>

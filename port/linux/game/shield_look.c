@@ -1,7 +1,7 @@
 /*
 SHIELD_LOOK.C
 
-Optional CMT Snow Grove plasma profiles overriding biped shield materials. The map owns its tags and pixels; this module owns only
+Optional plasma profiles overriding biped shield materials. The map owns its tags and pixels; this module owns only
 the draw-time shader copies. See docs/shield_look.md for the inspected
 data, appearance precedence and shared-engine hooks.
 */
@@ -82,6 +82,7 @@ struct shield_look_entry
 	long model_index;
 	struct shader const *authored_modifier;
 	boolean eligible;
+	boolean sprinkles;
 	struct shield_look_plasma body;
 	struct shield_look_plasma arms;
 };
@@ -96,7 +97,8 @@ static long shield_look_noise_index = NONE;
 static boolean shield_look_enabled(void)
 {
 	char const *value = config_string("display.shield_look");
-	return value && (!strcmp(value, "enhanced") || !strcmp(value, "enhanced2"));
+	return value && (!strcmp(value, "enhanced") || !strcmp(value, "enhanced2") ||
+		!strcmp(value, "classic_with_sprinkles"));
 }
 
 static uint32_t shield_look_hash(uint32_t hash, void const *data, size_t size)
@@ -205,6 +207,23 @@ static void shield_look_profile(struct shield_look_plasma *plasma, boolean arms)
 	plasma->secondary_scale = arms ? 62.f : 14.f;
 }
 
+/* Stock Xbox cyborg shield surface, inspected in Beaver Creek. Both presets
+use the same verified noise volume. The separate layer envelope is shared. */
+static void shield_look_classic_profile(struct shield_look_plasma *plasma)
+{
+	plasma->perpendicular_color.red = 1.f;
+	plasma->perpendicular_color.green = 0.545098f;
+	plasma->perpendicular_color.blue = 0.243137f;
+	plasma->parallel_color.red = 0.0666667f;
+	plasma->parallel_color.green = 0.0666667f;
+	plasma->parallel_color.blue = 1.f;
+	plasma->primary_period = 2.2f;
+	plasma->primary_direction.k = -0.3f;
+	plasma->primary_scale = 10.f;
+	plasma->secondary_period = 3.f;
+	plasma->secondary_scale = 6.f;
+}
+
 static struct shield_look_entry *shield_look_for_unit(long object_index, long hands_index)
 {
 	struct object_datum *object;
@@ -216,16 +235,19 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	short index;
 	long shader_index;
 	long noise_index;
+	boolean sprinkles;
 
 	if (!shield_look_enabled())
 		return NULL;
+	sprinkles = !strcmp(config_string("display.shield_look"), "classic_with_sprinkles");
 	object = object_try_and_get(object_index);
 	if (!object || object->object.type != _object_type_biped)
 		return NULL;
 	for (index = 0; index < shield_look_count; index++)
 	{
 		entry = &shield_looks[index];
-		if (entry->definition_index == object->definition_index && entry->hands_index == hands_index)
+		if (entry->definition_index == object->definition_index && entry->hands_index == hands_index &&
+			entry->sprinkles == sprinkles)
 			return entry->eligible ? entry : NULL;
 	}
 	/* Refuse overflow rather than recycling memory still used by a draw. */
@@ -234,6 +256,7 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	entry = &shield_looks[shield_look_count++];
 	entry->definition_index = object->definition_index;
 	entry->hands_index = hands_index;
+	entry->sprinkles = sprinkles;
 	definition = object_definition_get(object->definition_index);
 	if (!cache_file_tag_cache_contains(definition, sizeof(*definition)))
 		return NULL;
@@ -264,6 +287,11 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	entry->arms.primary_map.index = entry->arms.secondary_map.index = noise_index;
 	shield_look_profile(&entry->body, FALSE);
 	shield_look_profile(&entry->arms, TRUE);
+	if (sprinkles)
+	{
+		shield_look_classic_profile(&entry->body);
+		shield_look_classic_profile(&entry->arms);
+	}
 	/* The map still owns hit timing and the outgoing function channel.
 	Overshield animation writes that same channel; only appearance changes. */
 	entry->body.intensity_source = entry->arms.intensity_source = intensity_source;

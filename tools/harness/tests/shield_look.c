@@ -181,6 +181,37 @@ int main(int argc, char **argv)
         reference_pixels[0] ^= 1; read_failed = 1; CHECK(!shield_look_read_noise(3)); free(reference_pixels);
         return 0;
     }
+    if (!strcmp(argv[1], "sprinkles")) {
+        struct shield_look_plasma enhanced, saved, *p;
+        struct shader *previous;
+        real_rgb_color a, b;
+        previous = shield_look_body(0, &stock.shader);
+        enhanced = *(struct shield_look_plasma *)previous;
+        setting = "classic_with_sprinkles";
+        body = shield_look_body(0, &stock.shader); p = (struct shield_look_plasma *)body;
+        CHECK(body != previous && body != &stock.shader);
+        CHECK(p->primary_scale == 10.f && p->secondary_scale == 6.f);
+        CHECK(p->primary_period == 2.2f && p->secondary_period == 3.f);
+        CHECK(p->perpendicular_color.red == 1.f && p->parallel_color.blue == 1.f);
+        CHECK(p->offset_amount == enhanced.offset_amount && p->offset_exponent == enhanced.offset_exponent);
+        CHECK(draw_arms(0, 0, 7, &effect));
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->primary_scale == 10.f);
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->offset_amount == 0.03f);
+        CHECK(effect.modifier_animation.values == arm_values[0]);
+        saved = *p;
+        stock.perpendicular_color.red = 0.f; stock.perpendicular_color.green = 0.f; stock.perpendicular_color.blue = 1.f;
+        a = p->perpendicular_color; b = p->parallel_color;
+        CHECK(shield_look_colors(body, NULL, &a, &b));
+        CHECK(a.red == 0.f && a.green == 0.f && a.blue == 1.f);
+        CHECK(!memcmp(p, &saved, sizeof(saved)));
+        arm_setting = 0; CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(!effect.modifier_shader);
+        setting = "enhanced"; CHECK(shield_look_body(0, &stock.shader) == previous);
+        CHECK(!memcmp(previous, &enhanced, sizeof(enhanced)));
+        setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
+        setting = "classic_with_sprinkles"; CHECK(shield_look_body(0, &stock.shader) == body);
+        shield_look_reset(); CHECK(shield_look_body(0, &stock.shader) != &stock.shader);
+        return 0;
+    }
     if (!strcmp(argv[1], "colors")) {
         struct shield_look_plasma saved;
         real_rgb_color a, b, original_a, original_b;

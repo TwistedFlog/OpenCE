@@ -569,3 +569,57 @@ All 310 generated save/profile files were archived losslessly with SHA-256
 verification and their original relative paths recorded. About 27 MiB of
 logs, evidence and scripts remain, alongside required platform builds and
 toolchains. Original maps and user saves were untouched.
+
+
+## Classic with Sprinkles
+
+Video Setup > FOV and Viewmodels > SHIELD LOOK now also offers CLASSIC WITH
+SPRINKLES (`display.shield_look = "classic_with_sprinkles"`, or
+`HALO_SHIELD_LOOK=classic_with_sprinkles`). CLASSIC remains the default and
+retains map-authored shaders. ENHANCED retains its approved CMT appearance.
+
+The new preset uses the stock Xbox cyborg plasma surface: periods 2.2/3.0,
+noise scales 10/6, primary direction (2, 0, -0.3), secondary direction
+(0, 2, 0.5), and stock perpendicular/parallel RGB endpoints. Its rendering
+fields match the local Beaver Creek reference byte-for-byte except for the
+intentional body layer displacement. Both existing presets and the new one
+resolve the same verified noise volume through the active map's loader.
+No new texture bundle or mod-system dependency is introduced.
+
+Body and arm offsets, depleted arcs, recharge/retreat and Overshield
+precedence use the existing feature interfaces. Arm Shields remains the
+owner of arm visibility and its distance/FOV cap. Authored custom colours
+continue through the existing draw-local colour path. Preset style overrides
+authored materials as ENHANCED does; CLASSIC keeps its original behaviour.
+Cache entries include the preset identity, retaining stable shader copies
+across option changes rather than mutating queued draws. Map cleanup and
+bounded-capacity fallback remain unchanged. No new shared-engine hooks or
+MCC loading changes are needed.
+
+Validation: 100 focused tests, including stock-surface bytes, separate preset
+pointers, custom colour inheritance, arm suppression and switching back to
+unchanged ENHANCED/CLASSIC; Windows, Android guest/host and web builds.
+Hidden Windows captures compare CLASSIC, ENHANCED and CLASSIC WITH SPRINKLES
+on Xbox Beaver Creek and check Arm Shields ON/OFF. Coldsnap 20th retains its
+custom red shield colour. The actual menu was checked for the complete label
+at 1280x960; only this setting's selector was widened. The comparison video
+was decoded successfully and retained in `build/shield-sprinkles/evidence`.
+
+A two-peer local test with Sprinkles on the host and CLASSIC on the client
+passed the comparator over 26 seconds: no mismatched seconds or measured
+drift across 780 samples, with one client correction logged. No simulation
+or protocol data changed. Android/browser runtime visuals, internet/WebRTC,
+live split-screen and full campaign compatibility remain unverified.
+
+Mercury Falling also reached gameplay and showed the new surface through
+recharge and retreat. The starting player's existing stock palette was
+retained. The first fixture was refused for a misaligned appended script
+reference; the aligned copy passed without game-code or original-map edits.
+Its failed-run log remains available separately. The fixture only makes
+intro/continuous scripts dormant, fixes the test pose and adds a damage
+reference; rendering tags and map colour data remain intact.
+
+Cleanup removed about 4.0 GiB of temporary maps, duplicate binaries and raw
+captures. All 403 generated save/profile files were archived with SHA-256
+verification and original relative paths recorded. About 22 MiB of evidence,
+logs and scripts remain, with required platform builds/toolchains retained.
