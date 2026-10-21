@@ -26,6 +26,12 @@ static int locks, submissions, iterator_position;
 static short previous[32], next[32];
 static int solid_draws, shadow_draws, selected_geometry[8];
 static int legs_calls, legs_expected, legs_empty;
+/* These enclosure fixtures use CLASSIC; shield override eligibility is
+   exercised separately by the shield-look harness. */
+static boolean shield_look_skip_shell(struct model const *m, struct shader const *shader)
+{
+    return FALSE;
+}
 static struct triangle_buffer legs_triangles;
 static struct triangle_buffer const *first_person_legs_triangles(long object_index,
     struct model const *m, struct vertex_buffer const *vertices, struct triangle_buffer const *triangles)
