@@ -432,3 +432,5 @@ boolean shield_look_skip_shell(struct model const *model, struct shader const *s
 	}
 	return FALSE;
 }
+
+#include "shield_arcs.inl"

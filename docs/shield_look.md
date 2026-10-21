@@ -424,3 +424,95 @@ mean they are not claimed to be pixel-identical.
 Disposable map fixtures, per-run executables, caches and redundant captures were
 removed. Test saves were archived losslessly with verified SHA-256 hashes;
 selected screenshots and useful logs remain in the evidence directory.
+
+## Depleted ENHANCED shield arcs
+
+ENHANCED can use Bigass v3's original plasma-bolt sprite atlas while a living
+biped's shield is depleted and its recharge stun timer is still running.
+The effect stops on recharge, death or selection of CLASSIC. First-person
+arcs require Arm Shields and its eligible arm pass; their outward placement
+uses the existing Arm Shields offset cap. Normal shield shader parameters,
+colour inheritance and animated Overshield rendering are unchanged.
+
+The source asset is `altis\effects\bitmaps\plasma bolts`, referenced by
+Bigass's `altis\effects\energy` particle. The original sequence has 31 frames
+at 30 fps, 0.5-1 second lifetimes, 0.05 second fade-in and 0.15 second fade-out.
+Two 512x512 DXT1 atlases, their original three mip levels and sprite bounds
+are retained. The source map's cached flag is deliberately excluded from
+our private texture ownership flags.
+
+The emitter is an approximation of placement, not a copy of Bigass's object
+attachments or scripts: up to six body sprites or two arm sprites select
+non-root model bones independently. This covers head, limbs and feet where
+those bones exist. Body radius is 0.05-0.1 world units, with smaller arm
+sprites. Hashing object identity, time and slot supplies visual variation
+without advancing simulation RNG. The same image sequence, blending and
+lifetime ranges are used; exact original emission positions are not claimed.
+The local CLASSIC Bigass reference did not show persistent arcs throughout
+the waiting period in this port, so the comparison is not evidence of a
+frame-for-frame original-emitter match.
+
+### Local asset installation and provenance
+
+The user supplied `bigass_v3.map` and authorized local asset extraction.
+The atlas belongs to its original authors; its tag path identifies it as
+an Altis effect. No third-party source code, SDK headers or map pixels are
+committed or relicensed. Reproduce the local bundle with:
+
+```sh
+python tools/extract_shield_arcs.py /path/to/bigass_v3.map /data-root/shield_assets/bigass_arcs.bin
+```
+
+The extracted bundle is 345064 bytes, SHA-256
+`cb28214c0e5b3dc35650abac199113c8332fdf9093f5c973de1d2ecc32cb3cbd`.
+It is a fixed-format local asset file, independent of mods and map-family
+resource discovery. Without it, ENHANCED retains its existing appearance
+and logs one installation hint per map when an arc would be drawn. Invalid
+files and texture allocation failures also retain normal shields.
+
+### Integration and validation
+
+`shield_arcs.inl` extends the existing shield-look feature module. The body
+and first-person rendering hooks are needed to access each rendered model's
+pose; feature code alone cannot receive those poses. The cache-unload hook
+restores the previous tag table before the menu/MCC/mod table owners unwind,
+after the texture cache closes. It also covers failed load cleanup. No
+existing tag, model, shader, gameplay state or map-family loading path is
+modified. The private bitmap tag is appended only on the first eligible
+draw and released at the map boundary. Disabling ENHANCED stops draws
+immediately; retained private resources are released on unload.
+
+The Windows comparison uses hidden 1280x960 captures (640x480 stock render
+resolution). Bigass body and first-person runs exercise depletion, the
+waiting period and recharge; Arm Shields OFF removes the new arm effect.
+Xbox Beaver Creek also exercises depletion and recharge. Mercury Falling
+uses a disposable copy with dormant intro/continuous scripts and an aligned
+script damage reference to its actual `elefant\innie\weapons\hose\bullet`
+tag. MCC conversion restores tag names, so the temporary damage alias in
+earlier attempts did not apply damage. The corrected test shows depleted
+body arcs. Original map shaders, textures and models were not modified.
+Useful failed-run logs are retained but are not counted as passing checks.
+
+The 85 focused tests cover existing preset/colour/Overshield/Arm Shields
+behaviour, depleted-state gates, malformed bundles, texture failure and
+repeat load/unload ownership. Windows, Android guest/host and web release
+builds pass. Android/browser gameplay, full campaigns and live split-screen
+are not verified by these tests. Local captures and the comparison video
+are retained in `build/shield-arcs/evidence`.
+
+A hidden two-peer Xbox Beaver Creek run used ENHANCED on the host and
+CLASSIC on the client with scripted hits. The repository's log comparator
+passed 26 seconds at matching ticks: no state mismatches, no drift in 780
+samples and zero client corrections. The initial attempt lacked the lobby's
+stock map catalogue and did not host; its logs are retained separately.
+This is a local networking smoke test, not an internet/WebRTC or full
+co-op regression. No protocol or simulation data changed, so the network
+version is unchanged.
+
+Cleanup removed about 6.1 GiB of this assignment's disposable fixtures,
+caches and redundant captures. The 558 test save/profile files were archived
+losslessly with SHA-256 verification and original relative paths recorded.
+About 18 MiB of evidence, logs and scripts remain; the current platform
+builds and installed toolchains are retained. The local runtime bundle was
+installed in the user's Gulch data root. No original maps or saves were
+changed.

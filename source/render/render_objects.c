@@ -632,6 +632,11 @@ static void render_object_list(
 						(data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0) |
 						(legs_node_matrices ? FIRST_PERSON_LEGS_RENDER_FLAG : 0)); /* port: private lower-body geometry */
 
+					/* port: draw-only depleted shield arcs; no first-person leg duplicates. */
+					if (!data->shadow && !legs_node_matrices)
+						shield_arcs_draw(object_index, definition->object.model.index,
+							object_get_node_matrices(object_index), &model_effect, FALSE);
+
 					if (debug_objects)
 					{
 						object_type_render_debug(object_index);

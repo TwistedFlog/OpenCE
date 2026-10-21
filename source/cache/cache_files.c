@@ -611,6 +611,11 @@ void scenario_tags_unload(
 	}
 	sound_cache_close();
 	texture_cache_close();
+	/* port: shield sprite assets unwind before other appended tag tables. */
+	{
+		extern void shield_arcs_unload(void); /* port/linux/game/shield_arcs.inl */
+		shield_arcs_unload();
+	}
 	/* port: the mods' tags go, after the sound and texture caches that held
 	their sounds and bitmaps (port/linux/game/mods.c) */
 	{
@@ -1262,6 +1267,11 @@ long scenario_tags_load(
 		{
 			sound_cache_close();
 			texture_cache_close();
+			/* port: shield sprite assets unwind before other appended tag tables. */
+			{
+				extern void shield_arcs_unload(void); /* port/linux/game/shield_arcs.inl */
+				shield_arcs_unload();
+			}
 		}
 		return result;
 	}
