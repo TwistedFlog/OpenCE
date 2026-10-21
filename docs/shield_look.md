@@ -4,7 +4,7 @@ Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default)
 or ENHANCED. The former ENHANCED 2 profile is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
-small outward body flare on stock Spartan shields. This is a local rendering feature in `port/linux/game/shield_look.c`.
+small outward body flare, overriding map-authored shield modifiers. This is a local rendering feature in `port/linux/game/shield_look.c`.
 It does not use the mod loader or change simulation, shield strength, damage,
 network messages, map tags, models or cache files. No network-version change
 is required.
@@ -14,7 +14,8 @@ now authoritative for the added first-person pass in every SHIELD LOOK
 mode: OFF adds no arm shield; ON supplies the stock displacement and its
 distance/FOV-based cap. ENHANCED restyles that pass with the CMT pattern and
 colors while preserving its animation values and overshield handling.
-Authored map materials remain authoritative. Overshield Effect remains an
+CLASSIC preserves authored map shields. ENHANCED replaces authored shield
+modifiers and omits their duplicate plasma model shells. Overshield Effect remains an
 independent, opt-in visual modifier.
 
 ## Reference and provenance
@@ -78,53 +79,47 @@ change is needed; the existing renderer displaces vertices along normals.
 
 ## Map authority and isolation
 
-Eligibility is deliberately conservative and independent of map names and
-families. A biped qualifies only when its modifier's complete normalized
-plasma definition matches the stock cyborg shield, its shield-driving
-function and mappings are stock, and both noise references identify the same
-verified stock bitmap. Both the body model and the globals' hands must have
-only opaque model materials or the two exactly identified stock Chicago
-generator-light materials. Their complete normalized definitions, single
-texture stages and full DXT1 texture mip chains are checked; tag names are
-not trusted. Other plasma shells or transparent materials, alpha-blended
-model decals, missing/unknown data and extra object
-functions preserve the authored look. A modified shader or noise texture
-retaining the stock tag name is still rejected. This can conservatively
-leave an otherwise stock-looking custom map unchanged.
+CLASSIC returns the map's original shaders and submits its authored model
+materials unchanged. ENHANCED (including migrated `enhanced2`) takes precedence
+over authored shield modifier parameters and plasma shell materials on Xbox,
+CE and MCC. Shader/function fingerprints and unrelated transparent model
+materials no longer veto the selected appearance. Hit timing and the map's
+intensity channel remain unchanged; appearance is applied at draw time.
 
-FNV-1a fingerprints, after the documented normalization:
+The selected profile keeps the approved body parameters and the established
+Arm Shields stand-off (0.03, exponent 2), with its existing distance/FOV cap.
+Arm Shields OFF also suppresses authored plasma hand shells under ENHANCED;
+CLASSIC keeps the original map behavior. Visors, generator lights, decals and
+other non-plasma materials are retained, since transparency alone does not
+identify a shield. No map tags or geometry are rewritten.
 
-| Data | Fingerprint |
-| --- | --- |
-| Stock 0x14c plasma tag; type/pad and two relocated references zeroed | `762fcc1f` |
-| Shield function: first 60 bytes plus four runtime reciprocals | `d130b3a8` |
-| Xbox swizzled A8Y8 noise, 74898 bytes excluding padding | `f2f70788` |
-| CE linear ARGB noise, 149796 bytes | `e7f72da4` |
-| The same ARGB noise in MCC's hardware layout | `18ac1e94` |
-| Stock generator-light definitions; relocated references/blocks and type zeroed | `66e15fe3`, `015c769c` |
-| Stock generator-light stage; relocated bitmap reference zeroed | `7fda0175` |
-| Generator-light DXT1 texture, 174776 bytes, Xbox / CE / inspected MCC layout | `71b35cd8`, `42b1a420`, `e5e7e894` |
+The exact stock/CMT noise is found among the loaded map's bitmap tags using
+bounded reads and full-mip fingerprints: Xbox A8Y8 `f2f70788`, CE linear ARGB
+`e7f72da4`, MCC packed ARGB `18ac1e94`. This prevents custom modifier noise
+from changing the selected pattern. Each family retains its existing resource
+loader; no foreign map or mod is loaded. Missing/malformed plasma data, no
+matching noise resource, or exhausted profile capacity retains the original
+shader safely. Other valid modifier types receive the same private plasma profile; the
+animated overshield resolves its intensity channel from that selected profile.
 
-The feature calls the common `cache_file_read` interface. Xbox stays on its
-cache stream, CE on its resource-map reader, and MCC on its own prepared
-bitmap storage. It does not call an MCC adapter for Xbox/CE, change a map
-folder, or modify family detection. Bitmap reads and tag/block accesses are
-bounded. A failed read or full 64-entry profile cache keeps the map's look.
-The stock shader and function signatures were checked in Xbox
-`beavercreek.map`, CE `deathisland.map` and version-13 MCC
-`BetterWithFriends/b30.map`; all three match. These chains were subsequently
-exercised through their own loaders in the Windows gameplay runs below.
+Resource discovery and private shader copies reset before map load/unload.
+CLASSIC bypasses discovery and overrides; selecting ENHANCED again reuses
+stable per-map copies. Original map resources remain owned by their loaders.
 
 ## Necessary shared hooks
 
 The existing renderer has no registration point for a private modifier
-profile. Three minimal `port:` additions supply the required integration:
+profile. Minimal `port:` additions supply the required integration:
 
 - `render_objects.c`: substitute a private body shader at draw submission,
   after the existing modifier-type check. Animation values remain the unit's.
 - `first_person_weapons.c`: supply the hands modifier between the weapon and
   hands draws; CLASSIC and ineligible maps follow the existing Arm Shields
   call. The weapon never receives the enhanced modifier.
+- `models.c`: omit authored plasma shell parts belonging to a selected body
+  or hands profile before their normal transparent submission. A modifier-only
+  replacement cannot suppress these separately submitted model materials.
+  CLASSIC and unrelated models/materials retain their existing paths.
 - `cache_files.c`: clear eligibility and private shader/value copies before
   load and before unload. Failed loads and Xbox/CE/MCC transitions cannot
   reuse an earlier map's handles.
@@ -136,6 +131,9 @@ each local player. Disabling takes effect on subsequent draw submissions;
 the stable copies remain available for already queued packets until teardown.
 
 ## Verification history
+
+The earlier authority-refusal results below describe the previous policy.
+The current precedence policy supersedes those eligibility expectations.
 
 `python -m pytest -q tools/test_shield_look.py` compiles the actual feature
 module as 32-bit C89 with fake engine services. It covers CLASSIC/invalid
@@ -303,3 +301,47 @@ were exhausted. Arm Shields OFF kept the arms clear; Visible Overshields
 OFF also removed the persistent first-person effect at full charge. Original maps/saves
 were untouched. Android/browser gameplay, CE/MCC live maps, live split-screen
 and network sessions were not repeated for this visual-only colour change.
+
+## Selected-look precedence (21 October 2026)
+
+The current policy replaces the earlier authored-shield veto. CLASSIC is
+still the default and returns the original shader. ENHANCED and its legacy
+alias now replace valid authored modifiers; the original approved profile
+parameters are unchanged. The material hook also omits plasma shells and
+transparent parts using the authored modifier on registered biped/hands
+models. Opaque surfaces and unrelated transparent materials stay intact.
+The existing Arm Shields and animated Overshield controls retain ownership.
+
+69 focused tests pass, including an exact byte comparison of the approved
+rendering fields against the CMT reference, authored shader/noise/function
+cases, non-plasma modifiers, CLASSIC restoration, shell suppression,
+Arm Shields OFF, the actual overshield intensity-channel resolver, missing
+resources, cache reset and capacity. Windows, Android guest/host and web
+release builds pass. Only the FOV and Viewmodels menu help XML changed when
+regenerated from the settings generator.
+
+Windows OpenGL comparisons use the previous commit `657806db` and the new
+build at 1280x960. Stock Beaver Creek CLASSIC/body, ENHANCED/body and
+ENHANCED/arms retain their appearance. Disposable cyan-shield variants of
+Xbox Beaver Creek and CE Death Island show the authored cyan look with
+CLASSIC and the approved gold look with ENHANCED. CMT Snow Grove retains
+its authored arm layer with CLASSIC; ENHANCED replaces it, and Arm Shields
+OFF suppresses it. Frames come from separate runs, so animation phase is
+not pixel-identical; profile equality is checked by the regression test.
+
+The MCC BetterWithFriends/b30 fixture disables its introductory scripts and
+uses a steady outgoing B function for the material comparison, because the
+scripted damage cue did not reduce shields. This checks material precedence,
+not MCC damage behavior. The previous ENHANCED path and the new CLASSIC
+control retain cyan; the new ENHANCED path draws the approved gold profile.
+Test-only script references must be aligned to the
+map's virtual tag addresses, not file offsets. Rejected initial fixtures and
+local-network launch failures are retained in diagnostic logs and are not
+counted as successful comparisons. Both builds emitted MCC resource/audio
+diagnostics; this is not a full campaign compatibility claim.
+
+No original map or save was edited. Temporary runs are removed after capture,
+and test saves are archived with verified hashes. Android/browser gameplay,
+live split-screen, and two-machine networking were not repeated. Production
+changes only affect local rendering and menu help, with no protocol or
+simulation changes.

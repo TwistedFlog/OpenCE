@@ -1,10 +1,9 @@
 /*
 SHIELD_LOOK.C
 
-Optional CMT Snow Grove plasma profiles on positively identified stock
-Spartan shields. The map owns its tags and pixels; this module owns only
+Optional CMT Snow Grove plasma profiles overriding biped shield materials. The map owns its tags and pixels; this module owns only
 the draw-time shader copies. See docs/shield_look.md for the inspected
-data, conservative eligibility policy and shared-engine hooks.
+data, appearance precedence and shared-engine hooks.
 */
 
 #include "cseries.h"
@@ -20,6 +19,7 @@ data, conservative eligibility policy and shared-engine hooks.
 #include "rasterizer/rasterizer_model_types.h"
 #include "scenario/scenario.h"
 #include "shaders/shader_definitions.h"
+#include "shaders/shaders.h"
 #include "units/units.h"
 #include "shield_look.h"
 
@@ -79,6 +79,8 @@ struct shield_look_entry
 {
 	long definition_index;
 	long hands_index;
+	long model_index;
+	struct shader const *authored_modifier;
 	boolean eligible;
 	struct shield_look_plasma body;
 	struct shield_look_plasma arms;
@@ -88,6 +90,8 @@ struct shield_look_entry
 until they are submitted, including each split-screen view. */
 static struct shield_look_entry shield_looks[SHIELD_LOOK_MAXIMUM];
 static short shield_look_count;
+static boolean shield_look_noise_searched;
+static long shield_look_noise_index = NONE;
 
 static boolean shield_look_enabled(void)
 {
@@ -103,21 +107,6 @@ static uint32_t shield_look_hash(uint32_t hash, void const *data, size_t size)
 	for (index = 0; index < size; index++)
 		hash = (hash ^ bytes[index]) * UINT32_C(16777619);
 	return hash;
-}
-
-static boolean shield_look_stock_shader(struct shield_look_plasma const *plasma)
-{
-	struct shield_look_plasma copy;
-
-	if (!cache_file_tag_cache_contains(plasma, sizeof(*plasma)) || plasma->shader.base.type != 10)
-		return FALSE;
-	copy = *plasma;
-	/* Runtime type/padding and relocated tag references are not appearance. */
-	copy.shader.base.type = 0;
-	copy.shader.base.pad = 0;
-	memset(&copy.primary_map, 0, sizeof(copy.primary_map));
-	memset(&copy.secondary_map, 0, sizeof(copy.secondary_map));
-	return shield_look_hash(UINT32_C(2166136261), &copy, sizeof(copy)) == UINT32_C(0x762FCC1F);
 }
 
 static boolean shield_look_stock_noise(long tag_index)
@@ -164,130 +153,27 @@ static boolean shield_look_stock_noise(long tag_index)
 		(bitmap->flags & 8) ? hash == UINT32_C(0x18AC1E94) : hash == UINT32_C(0xE7F72DA4));
 }
 
-static boolean shield_look_stock_function(struct object_definition const *definition)
+/* Resolve the exact CMT noise through this map's existing resource loader.
+A custom modifier may reference different pixels; never use those for ENHANCED. */
+static long shield_look_noise(void)
 {
-	struct object_function_definition const *function;
-	uint32_t hash;
-
-	/* The outgoing B function drives stock shield hits. Extra functions or
-	a changed mapping may author a different shield even with stock tags. */
-	if (definition->object.function_modes[0] != 4 || definition->object.function_modes[1] != 2 ||
-		definition->object.function_modes[2] || definition->object.function_modes[3] ||
-		definition->object.functions.count != 2 ||
-		!cache_file_tag_cache_contains(definition->object.functions.address, 2 * sizeof(*function)))
-		return FALSE;
-	function = (struct object_function_definition const *)definition->object.functions.address + 1;
-	hash = shield_look_hash(UINT32_C(2166136261), function, 60);
-	hash = shield_look_hash(hash, &function->runtime_reciprocal_bounds_range, 4 * sizeof(real));
-	return hash == UINT32_C(0xD130B3A8);
-}
-
-/* The stock body includes two transparent generator lights. They are not
-shield shells. Recognize their complete material and texture, rather than
-excluding every Chicago material or trusting a map's tag names. */
-static boolean shield_look_stock_light_texture(long tag_index)
-{
-	struct bitmap_group *group;
-	struct bitmap_data *bitmap;
-	byte *pixels;
-	boolean complete = FALSE;
-	uint32_t hash;
-
-	if (tag_index == NONE || tag_get_group_tag(tag_index) != 'bitm')
-		return FALSE;
-	group = bitmap_group_get(tag_index);
-	if (!cache_file_tag_cache_contains(group, sizeof(*group)) || group->bitmaps.count != 1 ||
-		!cache_file_tag_cache_contains(group->bitmaps.address, sizeof(*bitmap)))
-		return FALSE;
-	bitmap = group->bitmaps.address;
-	if (bitmap->width != 512 || bitmap->height != 512 || bitmap->depth != 1 ||
-		bitmap->type != 0 || bitmap->format != 14 || bitmap->mipmap_count != 9 ||
-		(bitmap->flags & 0x1E) != 2 || bitmap->pixels_size < 174776 || bitmap->pixels_offset < 0)
-		return FALSE;
-	pixels = malloc(176128);
-	if (!pixels)
-		return FALSE;
-	memset(pixels, 0, 176128);
-	cache_file_read(tag_index, bitmap->pixels_offset, 174776, pixels, &complete, TRUE);
-	while (!complete)
-		SwitchToThread();
-	hash = shield_look_hash(UINT32_C(2166136261), pixels, 174776);
-	free(pixels);
-	return complete == TRUE && (hash == UINT32_C(0x71B35CD8) ||
-		hash == UINT32_C(0x42B1A420) || hash == UINT32_C(0xE5E7E894));
-}
-
-static boolean shield_look_stock_light(struct shader const *shader)
-{
-	byte copy[0x6C];
-	byte stage[0xDC];
-	struct tag_reference lens_flare;
-	struct tag_reference bitmap;
-	struct tag_block layers;
-	struct tag_block maps;
-	uint32_t hash;
-
-	if (!cache_file_tag_cache_contains(shader, sizeof(copy)) || shader->base.type != 6)
-		return FALSE;
-	memcpy(copy, shader, sizeof(copy));
-	memcpy(&lens_flare, copy + 0x38, sizeof(lens_flare));
-	memcpy(&layers, copy + 0x48, sizeof(layers));
-	memcpy(&maps, copy + 0x54, sizeof(maps));
-	if (lens_flare.index != NONE || layers.count != 0 || maps.count != 1 ||
-		!cache_file_tag_cache_contains(maps.address, sizeof(stage)))
-		return FALSE;
-	memset(copy + 0x24, 0, 4);
-	memset(copy + 0x38, 0, 0x28);
-	hash = shield_look_hash(UINT32_C(2166136261), copy, sizeof(copy));
-	if (hash != UINT32_C(0x66E15FE3) && hash != UINT32_C(0x015C769C))
-		return FALSE;
-	memcpy(stage, maps.address, sizeof(stage));
-	memcpy(&bitmap, stage + 0x6C, sizeof(bitmap));
-	memset(stage + 0x6C, 0, sizeof(bitmap));
-	return shield_look_hash(UINT32_C(2166136261), stage, sizeof(stage)) == UINT32_C(0x7FDA0175) &&
-		shield_look_stock_light_texture(bitmap.index);
-}
-
-static boolean shield_look_model_has_no_overlay(long model_index)
-{
-	struct model *model;
-	struct shield_look_model_shader const *references;
-	struct shader const *surface;
-	word flags;
+	struct tag_iterator iterator;
 	long index;
-	unsigned long group_tag;
 
-	if (model_index == NONE)
-		return FALSE;
-	model = model_definition_get(model_index);
-	if (!cache_file_tag_cache_contains(model, sizeof(*model)) || model->shaders.count <= 0 ||
-		model->shaders.count > MAXIMUM_SHADERS_PER_MODEL ||
-		!cache_file_tag_cache_contains(model->shaders.address, model->shaders.count * sizeof(*references)))
-		return FALSE;
-	references = model->shaders.address;
-	for (index = 0; index < model->shaders.count; index++)
+	if (!shield_look_noise_searched)
 	{
-		/* A plasma shell, Chicago layer or other transparent surface may
-		be an authored shield. Unknown surfaces are preserved too. */
-		if (references[index].shader.index == NONE)
-			return FALSE;
-		group_tag = tag_get_group_tag(references[index].shader.index);
-		if (group_tag != 'soso' && group_tag != 'schi')
-			return FALSE;
-		surface = shader_definition_get(references[index].shader.index);
-		if (group_tag == 'schi' && shield_look_stock_light(surface))
-			continue;
-		if (group_tag != 'soso')
-			return FALSE;
-		if (!cache_file_tag_cache_contains(surface, sizeof(*surface) + sizeof(flags)))
-			return FALSE;
-		/* shader_model can also author a transparent shell with its
-		alpha-blended-decal flag (rasterizer_xbox_models.c, bit 3). */
-		memcpy(&flags, (byte const *)surface + sizeof(*surface), sizeof(flags));
-		if (flags & (1 << 3))
-			return FALSE;
+		shield_look_noise_searched = TRUE;
+		tag_iterator_new(&iterator, 'bitm');
+		while ((index = tag_iterator_next(&iterator)) != NONE)
+		{
+			if (shield_look_stock_noise(index))
+			{
+				shield_look_noise_index = index;
+				break;
+			}
+		}
 	}
-	return TRUE;
+	return shield_look_noise_index;
 }
 
 static void shield_look_profile(struct shield_look_plasma *plasma, boolean arms)
@@ -324,9 +210,12 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	struct object_datum *object;
 	struct object_definition *definition;
 	struct shield_look_plasma const *plasma;
+	struct shader const *shader;
+	short intensity_source;
 	struct shield_look_entry *entry;
 	short index;
 	long shader_index;
+	long noise_index;
 
 	if (!shield_look_enabled())
 		return NULL;
@@ -348,28 +237,45 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	definition = object_definition_get(object->definition_index);
 	if (!cache_file_tag_cache_contains(definition, sizeof(*definition)))
 		return NULL;
+	entry->model_index = definition->object.model.index;
 	shader_index = definition->object.modifier_shader.index;
-	if (shader_index == NONE || tag_get_group_tag(shader_index) != 'spla' ||
-		!shield_look_stock_function(definition) ||
-		!shield_look_model_has_no_overlay(definition->object.model.index) ||
-		!shield_look_model_has_no_overlay(hands_index))
+	if (shader_index == NONE || entry->model_index == NONE || hands_index == NONE)
 		return NULL;
-	plasma = (struct shield_look_plasma const *)shader_definition_get(shader_index);
-	if (!shield_look_stock_shader(plasma) || plasma->primary_map.index != plasma->secondary_map.index ||
-		!shield_look_stock_noise(plasma->primary_map.index))
+	shader = shader_definition_get(shader_index);
+	if (!cache_file_tag_cache_contains(shader, sizeof(*shader)) ||
+		!shader_type_is_valid_for_modifier(shader->base.type))
 		return NULL;
-	entry->body = entry->arms = *plasma;
+	plasma = shader->base.type == 10 ? (struct shield_look_plasma const *)shader : NULL;
+	if (plasma && !cache_file_tag_cache_contains(plasma, sizeof(*plasma)))
+		return NULL;
+	noise_index = shield_look_noise();
+	if (noise_index == NONE)
+		return NULL;
+	if (plasma)
+		entry->body = entry->arms = *plasma;
+	else
+	{
+		entry->body.shader = entry->arms.shader = *shader;
+		entry->body.shader.base.type = entry->arms.shader.base.type = 10;
+	}
+	entry->authored_modifier = shader;
+	intensity_source = plasma ? plasma->intensity_source : 2;
+	entry->body.primary_map.index = entry->body.secondary_map.index = noise_index;
+	entry->arms.primary_map.index = entry->arms.secondary_map.index = noise_index;
 	shield_look_profile(&entry->body, FALSE);
 	shield_look_profile(&entry->arms, TRUE);
-	/* Arm Shields owns displacement and its distance/FOV cap. Keep the
-	stock modifier's offset fields; only its visual profile changes. */
-	entry->arms.offset_source = plasma->offset_source;
-	entry->arms.offset_amount = plasma->offset_amount;
-	entry->arms.offset_exponent = plasma->offset_exponent;
+	/* The map still owns hit timing and the outgoing function channel.
+	Overshield animation writes that same channel; only appearance changes. */
+	entry->body.intensity_source = entry->arms.intensity_source = intensity_source;
+	/* Use the established Arm Shields stand-off, capped by its existing
+	distance/FOV calculation. An authored zero-offset shell must not remove it. */
+	entry->arms.offset_source = intensity_source;
+	entry->arms.offset_amount = 0.03f;
+	entry->arms.offset_exponent = 2.f;
 	/* A small normal displacement follows the visible hit intensity (B),
 	not the unused stock C function. At full intensity this is 3.8 cm;
 	the square root keeps a gentle outer layer while the hit fades. */
-	entry->body.offset_source = 2;
+	entry->body.offset_source = intensity_source;
 	entry->body.offset_amount = 0.0125f;
 	entry->body.offset_exponent = 0.5f;
 	entry->eligible = TRUE;
@@ -380,6 +286,8 @@ void shield_look_reset(void)
 {
 	memset(shield_looks, 0, sizeof(shield_looks));
 	shield_look_count = 0;
+	shield_look_noise_searched = FALSE;
+	shield_look_noise_index = NONE;
 }
 
 struct shader *shield_look_body(long object_index, struct shader *original)
@@ -405,12 +313,35 @@ boolean shield_look_arms(short local_player_index, long unit_index, long hands_m
 	struct shield_look_entry *entry;
 
 	/* The caller first applies Arm Shields. OFF leaves no pass to restyle;
-	ON retains its values pointer, including its offset cap and overshield. */
-	if (!effect->modifier_shader || local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS)
+	ON retains its values pointer, including its offset cap and overshield.
+	Register the model even when OFF so authored hand shells are suppressed. */
+	if (local_player_index < 0 || local_player_index >= MAXIMUM_LOCAL_PLAYERS)
 		return FALSE;
 	entry = shield_look_for_unit(unit_index, hands_model_index);
-	if (!entry)
+	if (!entry || !effect->modifier_shader)
 		return FALSE;
 	effect->modifier_shader = &entry->arms.shader;
 	return TRUE;
+}
+
+/* A map can duplicate its body/arm geometry for a plasma shell. When the
+selected modifier already supplies that layer, omit the authored plasma
+part before submitting either the base material or another modifier copy.
+Other transparent materials (visors, lamps and decals) are not shields. */
+boolean shield_look_skip_shell(struct model const *model, struct shader const *surface)
+{
+	short index;
+
+	if (!surface || !model || !shield_look_enabled())
+		return FALSE;
+	for (index = 0; index < shield_look_count; index++)
+	{
+		if (shield_looks[index].eligible &&
+			(surface->base.type == 10 ||
+			 (surface->base.type > 4 && surface == shield_looks[index].authored_modifier)) &&
+			(model == model_definition_get(shield_looks[index].model_index) ||
+			model == model_definition_get(shield_looks[index].hands_index)))
+			return TRUE;
+	}
+	return FALSE;
 }

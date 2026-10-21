@@ -28,21 +28,18 @@ def shield_tool(tmp_path_factory):
     work = tmp_path_factory.mktemp("shield-look")
     source = (ROOT / "port/linux/game/shield_look.c").read_text()
     source = re.sub(r'^#include "[^"\n]+"\s*$', '', source, flags=re.M)
-    # Eligibility uses the real stock-shader and object-function hashes. A
-    # separate switch stands in for the bitmap's external cache read; the
-    # unmodified bitmap validator is also exercised below on malformed data.
+    # Stub successful cache discovery separately from the real bitmap reader.
     source = source.replace("static boolean shield_look_stock_noise(", "static boolean shield_look_read_noise(")
-    source = source.replace("!shield_look_stock_noise(plasma->primary_map.index)",
-                            "!noise_matches")
-    source = source.replace("static boolean shield_look_stock_light_texture(",
-                            "static boolean shield_look_read_light_texture(")
-    source = source.replace("shield_look_stock_light_texture(bitmap.index)", "light_texture_matches")
+    source = source.replace("shield_look_stock_noise(index)", "(index == 3 ? noise_matches : 1)")
     shader_header = (ROOT / "source/shaders/shader_definitions.h").read_text()
     object_header = (ROOT / "source/objects/object_definitions.h").read_text()
     structs = "\n".join(structure(shader_header, n) for n in
                         ("shader_radiosity_properties", "shader_physics_properties", "shader_base", "shader"))
     structs += "\n" + structure(object_header, "object_function_definition")
     (work / "real_types.inc").write_text(structs)
+    overshield = (ROOT / "port/linux/game/overshield_effect.c").read_text()
+    source += "\n" + structure(overshield, "overshield_effect_plasma")
+    source += "\n" + function(overshield, "overshield_effect_intensity_source")
     (work / "under_test.inc").write_text(source)
     output = work / ("shield.exe" if os.name == "nt" else "shield")
     flags = ["-m32", "-std=gnu89", "-Wall", "-Werror", "-Wno-unused-function", "-Wno-multichar"]
@@ -55,17 +52,11 @@ def shield_tool(tmp_path_factory):
 
 
 @pytest.mark.parametrize("case", ["classic", "invalid-setting", "profiles", "authored-shader", "authored-noise",
-                                  "authored-function", "authored-hands", "authored-body", "authored-decal", "missing", "split",
+                                  "authored-function", "authored-channel", "authored-nonplasma", "authored-environment", "authored-hands", "authored-body", "authored-decal", "missing", "no-noise", "split",
                                   "toggle", "outer", "arms-off", "reload", "capacity", "malformed-noise"])
 @pytest.mark.parametrize("look", ["enhanced", "enhanced2"])
 def test_shield_look(shield_tool, case, look):
     run = subprocess.run([str(shield_tool), case, look], capture_output=True, text=True, timeout=15)
-    assert run.returncode == 0, run.stdout + run.stderr
-
-
-@pytest.mark.parametrize("case", ["stock-lights", "authored-light", "authored-light-stage", "authored-light-texture"])
-def test_generator_lights(shield_tool, case):
-    run = subprocess.run([str(shield_tool), case], capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stdout + run.stderr
 
 
@@ -101,6 +92,8 @@ def test_shared_hooks():
     cache = (ROOT / "source/cache/cache_files.c").read_text()
     assert "shield_look_reset();" in function(cache, "scenario_tags_load")
     assert "shield_look_reset();" in function(cache, "scenario_tags_unload")
+    models = (ROOT / "source/models/models.c").read_text()
+    assert "shield_look_skip_shell(model, shader)" in function(models, "render_model_parts")
     objects = (ROOT / "source/render/render_objects.c").read_text()
     assert "shield_look_body(object_index, model_effect.modifier_shader)" in objects
 
@@ -139,7 +132,7 @@ def test_approved_profile_parameters(shield_tool):
     struct.pack_into("<h", body, 0x34, 2)
     struct.pack_into("<ff", body, 0x38, 0.0125, 0.5)
     arms = bytearray(tags[entries[2163][2]:entries[2163][2] + 0x14C])
-    # First-person displacement follows the positively identified stock tag.
+    # First-person displacement retains the approved Arm Shields profile.
     struct.pack_into("<h", arms, 0x34, 2)
     struct.pack_into("<ff", arms, 0x38, 0.03, 2.0)
     expected = b"".join(profile[lo:hi] for profile in (body, arms) for lo, hi in spans)
@@ -165,32 +158,6 @@ def test_stock_fingerprints(shield_tool, tmp_path):
     result = subprocess.run([str(shield_tool), "reference", str(shader_path), str(pixels_path)],
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_stock_generator_materials(shield_tool, tmp_path):
-    path = os.environ.get("SHIELD_LOOK_STOCK_MAP")
-    if not path:
-        pytest.skip("set SHIELD_LOOK_STOCK_MAP for the local generator-light comparison")
-    data, tags, entries, base = map_tags(Path(path))
-    by_name = {entry[1]: entry for entry in entries}
-    for name in (r"characters\cyborg\shaders\light shield", r"characters\cyborg\shaders\light shield generator"):
-        shader = by_name[name][2]
-        count, address = struct.unpack_from("<II", tags, shader + 0x54)
-        assert count == 1
-        stage = address - base
-        bitmap_tag = struct.unpack_from("<I", tags, stage + 0x78)[0] & 0xFFFF
-        group = entries[bitmap_tag][2]
-        count, address = struct.unpack_from("<II", tags, group + 0x60)
-        assert count == 1
-        bitmap = address - base
-        assert struct.unpack_from("<5H", tags, bitmap + 4) == (512, 512, 1, 0, 14)
-        offset, size = struct.unpack_from("<II", tags, bitmap + 24)
-        paths = [tmp_path / name for name in ("light.bin", "stage.bin", "pixels.bin")]
-        for dest, content in zip(paths, (tags[shader:shader + 0x6C], tags[stage:stage + 0xDC], data[offset:offset + size])):
-            dest.write_bytes(content)
-        result = subprocess.run([str(shield_tool), "light-reference", *map(str, paths)],
-                                capture_output=True, text=True, timeout=15)
-        assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_cmt_noise_is_stock(shield_tool, tmp_path):

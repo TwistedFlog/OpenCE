@@ -531,7 +531,7 @@ static void render_object_list(
 						if (shader_type_is_valid_for_modifier(
 							model_effect.modifier_shader->base.type))
 						{
-							/* port: optional stock shield profile; authored map shaders stay authoritative. */
+							/* port: selected shield profile; CLASSIC preserves the map shader. */
 							model_effect.modifier_shader = shield_look_body(object_index, model_effect.modifier_shader);
 							model_effect.modifier_animation.colors =
 								object->object.outgoing_change_colors;

@@ -31,6 +31,7 @@ from below its lowest node to above its highest.
 
 #include "cseries.h"
 #include "real_math.h"
+#include "shield_look.h"
 #include "objects/objects.h"
 #include "objects/object_definitions.h"
 #include "models/model_definitions.h"
@@ -203,6 +204,8 @@ static short overshield_effect_intensity_source(
 	if (!definition || definition->object.modifier_shader.index == NONE)
 		return NONE;
 	shader = shader_definition_get(definition->object.modifier_shader.index);
+	/* The selected appearance also owns the animated intensity channel. */
+	shader = shield_look_body(unit_index, shader);
 	if (!shader || shader->base.type != _shader_type_transparent_plasma_glow)
 		return NONE;
 	source = ((struct overshield_effect_plasma const *)((byte const *)shader + sizeof(struct shader)))->

@@ -13,6 +13,7 @@
 #define NUMBER_OF_OUTGOING_OBJECT_FUNCTIONS 4
 #define TAG_STRING_LENGTH 31
 #define _object_type_biped 0
+#define _shader_type_transparent_plasma_glow 10
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "line %d: %s\n", __LINE__, #x); return 1; } } while (0)
 typedef unsigned char boolean;
 typedef unsigned char byte;
@@ -46,7 +47,10 @@ static struct object_datum object;
 static struct unit_datum unit;
 static struct game_globals globals;
 static int noise_matches = 1;
-static int light_texture_matches = 1;
+static int no_noise;
+struct tag_iterator { long index; };
+static void tag_iterator_new(struct tag_iterator *it, unsigned long group) { (void)group; it->index = 0; }
+static long tag_iterator_next(struct tag_iterator *it) { return no_noise ? NONE : it->index++ == 0 ? 3 : it->index == 2 ? 9 : NONE; }
 static int overshield;
 static unsigned char *reference_pixels;
 static long reference_size;
@@ -56,8 +60,10 @@ static boolean cache_file_tag_cache_contains(void const *p, long size) { return 
 static unsigned long tag_get_group_tag(long i) { return i >= 0 && i < 16 ? groups[i] : 0; }
 static void *bitmap_group_get(long i) { return tags[i]; }
 static void *object_definition_get(long i) { return tags[i]; }
+static boolean shader_type_is_valid_for_modifier(short type) { return type == 1 || (type > 4 && type <= 10); }
 static void *shader_definition_get(long i) { return tags[i]; }
 static void *model_definition_get(long i) { return tags[i]; }
+static struct object_datum *object_get(long i) { (void)i; return &object; }
 static struct object_datum *object_try_and_get(long i) { return i == NONE ? NULL : &object; }
 static struct unit_datum *unit_get(long i) { (void)i; return &unit; }
 static struct game_globals *scenario_get_game_globals(void) { return &globals; }
@@ -157,62 +163,12 @@ int main(int argc, char **argv)
     struct shader *body;
     int i;
     FILE *file;
-    byte light[0x6C] = {0}, stage[0xDC] = {0};
-    struct tag_block light_maps = {1, stage, NULL};
-    struct tag_reference light_bitmap = {'bitm', NULL, 0, 3};
-    struct tag_reference light_lens = {'lens', NULL, 0, NONE};
-    short light_type = 6, light_flags = 0x200, light_blend = 3, light_material = 11;
-    real one = 1.f, rotation = 360.f;
     CHECK(argc >= 2);
     setup();
     if (argc == 3) setting = argv[2];
-    CHECK(shield_look_stock_shader(&stock));
-    CHECK(shield_look_stock_function(&definition));
-    if (!strcmp(argv[1], "light-reference")) {
-        CHECK(argc == 5);
-        file = fopen(argv[2], "rb"); CHECK(file);
-        CHECK(fread(light, 1, sizeof(light), file) == sizeof(light)); fclose(file);
-        file = fopen(argv[3], "rb"); CHECK(file);
-        CHECK(fread(stage, 1, sizeof(stage), file) == sizeof(stage)); fclose(file);
-        memcpy(light + 0x54, &light_maps, sizeof(light_maps));
-        memcpy(stage + 0x6C, &light_bitmap, sizeof(light_bitmap));
-        CHECK(shield_look_stock_light((struct shader *)light));
-        file = fopen(argv[4], "rb"); CHECK(file); fseek(file, 0, SEEK_END); reference_size = ftell(file);
-        rewind(file); reference_pixels = malloc(reference_size); CHECK(reference_pixels);
-        CHECK(fread(reference_pixels, 1, reference_size, file) == (size_t)reference_size); fclose(file);
-        bitmap.width = bitmap.height = 512; bitmap.depth = 1; bitmap.type = 0;
-        bitmap.format = 14; bitmap.mipmap_count = 9; bitmap.flags = 0x83; bitmap.pixels_size = reference_size;
-        CHECK(shield_look_read_light_texture(3)); reference_pixels[0] ^= 1;
-        CHECK(!shield_look_read_light_texture(3)); reference_pixels[0] ^= 1;
-        bitmap.width = 256; CHECK(!shield_look_read_light_texture(3)); bitmap.width = 512;
-        read_failed = 1; CHECK(!shield_look_read_light_texture(3)); free(reference_pixels);
-        return 0;
-    }
-    if (!strcmp(argv[1], "stock-lights") || !strncmp(argv[1], "authored-light", 14)) {
-        memcpy(light + 0x22, &light_material, 2); memcpy(light + 0x24, &light_type, 2);
-        memcpy(light + 0x28, &light_flags, 2); memcpy(light + 0x2C, &light_blend, 2);
-        memcpy(light + 0x38, &light_lens, sizeof(light_lens));
-        memcpy(light + 0x54, &light_maps, sizeof(light_maps));
-        memcpy(stage + 0x6C, &light_bitmap, sizeof(light_bitmap));
-        memcpy(stage + 0x54, &one, 4); memcpy(stage + 0x58, &one, 4);
-        for (i = 0xA8; i <= 0xC8; i += 8) memcpy(stage + i, &one, 4);
-        memcpy(stage + 0xD0, &rotation, 4);
-        CHECK(shield_look_stock_light((struct shader *)light));
-        /* Both stock generator materials must pass; unknown Chicago
-           layers, altered stages and texture changes must not. */
-        light[0x22] = 0; CHECK(shield_look_stock_light((struct shader *)light));
-        tags[5] = light; groups[5] = 'schi';
-        if (!strcmp(argv[1], "authored-light")) light[0x28] ^= 1;
-        if (!strcmp(argv[1], "authored-light-stage")) stage[0x54] ^= 1;
-        if (!strcmp(argv[1], "authored-light-texture")) light_texture_matches = 0;
-        body = shield_look_body(0, &stock.shader);
-        CHECK((body != &stock.shader) == !strcmp(argv[1], "stock-lights"));
-        return 0;
-    }
     if (!strcmp(argv[1], "reference")) {
         CHECK(argc == 4 || argc == 5); file = fopen(argv[2], "rb"); CHECK(file);
         CHECK(fread(&stock, 1, sizeof(stock), file) == sizeof(stock)); fclose(file);
-        CHECK(shield_look_stock_shader(&stock));
         file = fopen(argv[3], "rb"); CHECK(file); fseek(file, 0, SEEK_END); reference_size = ftell(file);
         rewind(file); reference_pixels = malloc(reference_size); CHECK(reference_pixels);
         CHECK(fread(reference_pixels, 1, reference_size, file) == (size_t)reference_size); fclose(file);
@@ -226,17 +182,22 @@ int main(int argc, char **argv)
     }
     if (!strcmp(argv[1], "classic")) setting = "classic";
     else if (!strcmp(argv[1], "invalid-setting")) setting = "not-a-profile";
-    else if (!strcmp(argv[1], "authored-shader")) stock.primary_scale = 18.f;
+    else if (!strcmp(argv[1], "authored-shader")) { stock.primary_scale = 80.f; stock.offset_amount = 0.f; }
     else if (!strcmp(argv[1], "authored-noise")) noise_matches = 0;
+    else if (!strcmp(argv[1], "authored-environment")) stock.shader.base.type = 1;
+    else if (!strcmp(argv[1], "authored-nonplasma")) stock.shader.base.type = 6;
+    else if (!strcmp(argv[1], "authored-channel")) stock.intensity_source = 3;
     else if (!strcmp(argv[1], "authored-function")) functions[1].period = 2.f;
     else if (!strcmp(argv[1], "authored-hands")) groups[8] = 'spla';
     else if (!strcmp(argv[1], "authored-body")) groups[5] = 'spla';
     else if (!strcmp(argv[1], "authored-decal")) opaque.flags = 1 << 3;
+    else if (!strcmp(argv[1], "no-noise")) no_noise = 1;
     else if (!strcmp(argv[1], "missing")) definition.object.modifier_shader.index = NONE;
     if (!strcmp(argv[1], "classic") || !strcmp(argv[1], "invalid-setting") ||
-        !strncmp(argv[1], "authored-", 9) || !strcmp(argv[1], "missing")) {
+        !strcmp(argv[1], "missing") || !strcmp(argv[1], "no-noise")) {
         CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader == &stock.shader); return 0;
+        CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader == &stock.shader);
+        CHECK(!shield_look_skip_shell(&hands_model, &stock.shader)); return 0;
     }
     if (!strcmp(argv[1], "malformed-noise")) {
         CHECK(!shield_look_read_noise(NONE)); CHECK(!shield_look_read_noise(3));
@@ -245,7 +206,26 @@ int main(int argc, char **argv)
     }
     body = shield_look_body(0, &stock.shader); CHECK(body != &stock.shader);
     CHECK(draw_arms(0, 0, 7, &effect)); CHECK(effect.modifier_shader != body);
-    CHECK(shield_look_stock_shader(&stock)); /* no mutation of the source tag */
+    CHECK(stock.secondary_scale == 6.f); /* source tag was not mutated */
+    if (!strncmp(argv[1], "authored-", 9)) {
+        CHECK(((struct shield_look_plasma *)body)->primary_scale == 18.f);
+        CHECK(((struct shield_look_plasma *)body)->intensity_source == stock.intensity_source);
+        CHECK(overshield_effect_intensity_source(0) == stock.intensity_source - 1);
+        CHECK(((struct shield_look_plasma *)body)->offset_source == stock.intensity_source);
+        CHECK(((struct shield_look_plasma *)body)->primary_map.index == (noise_matches ? 3 : 9));
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->primary_scale == 45.f);
+        CHECK(((struct shield_look_plasma *)effect.modifier_shader)->offset_amount == 0.03f);
+        CHECK(shield_look_skip_shell(&hands_model, &stock.shader) == (stock.shader.base.type > 4));
+        CHECK(shield_look_skip_shell(&model, &stock.shader) == (stock.shader.base.type > 4));
+        CHECK(!shield_look_skip_shell(&model, &opaque.shader));
+        setting = "classic";
+        CHECK(overshield_effect_intensity_source(0) ==
+            (stock.shader.base.type == 10 ? stock.intensity_source - 1 : NONE));
+        CHECK(!shield_look_skip_shell(&hands_model, &stock.shader));
+        CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
+        CHECK(!draw_arms(0, 0, 7, &effect));
+        return 0;
+    }
     CHECK(effect.modifier_animation.values[1] == 0.5f);
     if (!strcmp(argv[1], "export")) {
         export_shader((struct shield_look_plasma *)body);
@@ -254,6 +234,7 @@ int main(int argc, char **argv)
     if (!strcmp(argv[1], "arms-off")) {
         arm_setting = 0;
         CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(!effect.modifier_shader);
+        CHECK(shield_look_skip_shell(&hands_model, &stock.shader));
         CHECK(shield_look_body(0, &stock.shader) == body);
         arm_setting = 1; CHECK(draw_arms(0, 0, 7, &effect));
         CHECK(effect.modifier_animation.values == arm_values[0]);
@@ -304,9 +285,9 @@ int main(int argc, char **argv)
         CHECK(!draw_arms(0, 0, 7, &second));
         setting = argc == 3 ? argv[2] : "enhanced"; CHECK(shield_look_body(0, &stock.shader) == body);
     } else if (!strcmp(argv[1], "reload")) {
-        shield_look_reset(); stock.primary_scale = 80.f;
+        shield_look_reset(); definition.object.modifier_shader.index = NONE;
         CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        shield_look_reset(); stock.primary_scale = 10.f;
+        shield_look_reset(); definition.object.modifier_shader.index = 2;
         CHECK(shield_look_body(0, &stock.shader) != &stock.shader);
     } else if (!strcmp(argv[1], "capacity")) {
         for (i = shield_look_count; i < SHIELD_LOOK_MAXIMUM; i++) {
