@@ -477,6 +477,7 @@ struct draw_uniforms
 	float screen_offset;
 	float texture_lod_bias[4];
 	float height_fade[4];
+	float shield_honeycomb[3][4];
 };
 
 struct program_entry
@@ -495,6 +496,7 @@ struct program_entry
 	GLint texture_lod_bias;
 	GLint screen_offset;
 	GLint height_fade;
+	GLint shield_honeycomb;
 	/* nv2a_pixel_shader_key's source_blend's color, and what it last had */
 	GLint blend_constant;
 	float blend_constant_value[4];
@@ -3330,6 +3332,7 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 	entry->texture_lod_bias = glGetUniformLocation(entry->program, "texture_lod_bias");
 	entry->screen_offset = glGetUniformLocation(entry->program, "screen_offset");
 	entry->height_fade = glGetUniformLocation(entry->program, "height_fade");
+	entry->shield_honeycomb = glGetUniformLocation(entry->program, "shield_honeycomb");
 	entry->blend_constant = glGetUniformLocation(entry->program, "blend_constant");
 	entry->model_lights = glGetUniformLocation(entry->program, "model_lights");
 	for (stage = 0; stage < D3DTSS_MAXSTAGES; stage++)
@@ -4148,11 +4151,26 @@ static void gl_check_errors(const char *where)
 
 /* the uniforms of the latest draws, converted from these inputs; the serial
 counts the conversions */
-#define DRAW_UNIFORM_INPUT_COUNT (4 + 4 + 16 + 1 + 16 + 2 + 4 + 1 + 1 + 7 * D3DTSS_MAXSTAGES + 4)
+#define DRAW_UNIFORM_INPUT_COUNT (4 + 4 + 16 + 1 + 16 + 2 + 4 + 1 + 1 + 7 * D3DTSS_MAXSTAGES + 4 + 12)
 
 /* the height fade of the draws that follow (d3d8_gl_set_height_fade): off
 while its scale is zero */
 static float height_fade_value[4];
+static float shield_honeycomb_value[3][4];
+
+/* Draw-local extension for shield_honeycomb_gl.h. A zero scale disables it;
+the caller restores that state immediately after the owned plasma draw. */
+void d3d8_gl_set_shield_honeycomb(float scale, float time,
+	const float *difference, const float *parallel)
+{
+	shield_honeycomb_value[0][3] = scale;
+	if (scale != 0.f)
+	{
+		memcpy(shield_honeycomb_value[1], difference, 4 * sizeof(float));
+		memcpy(shield_honeycomb_value[2], parallel, 4 * sizeof(float));
+		shield_honeycomb_value[1][3] = time;
+	}
+}
 
 /* The draws that follow fade out above a height on their model (the shield
 flare rising up a body: port/linux/game/overshield_effect.c): each vertex's
@@ -4468,6 +4486,8 @@ static struct program_entry *prepare_draw(BOOL immediate)
 		}
 		memcpy(&inputs[count], height_fade_value, sizeof(height_fade_value));
 		count += 4;
+		memcpy(&inputs[count], shield_honeycomb_value, sizeof(shield_honeycomb_value));
+		count += 12;
 		if (!draw_uniforms_serial || !words_equal(inputs, draw_uniform_inputs, sizeof(inputs)))
 		{
 			struct draw_uniforms *converted = &draw_uniforms;
@@ -4507,6 +4527,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 			}
 			converted->screen_offset = (float)UI_OFFSET;
 			memcpy(converted->height_fade, height_fade_value, sizeof(converted->height_fade));
+			memcpy(converted->shield_honeycomb, shield_honeycomb_value, sizeof(converted->shield_honeycomb));
 		}
 	}
 	/* and a program that has had them since needs none of them */
@@ -4529,6 +4550,7 @@ static struct program_entry *prepare_draw(BOOL immediate)
 	uniform_float(entry->screen_offset, &entry->uniforms.screen_offset, draw_uniforms.screen_offset);
 	uniform_vec4(entry->texture_lod_bias, entry->uniforms.texture_lod_bias, draw_uniforms.texture_lod_bias, 1);
 	uniform_vec4(entry->height_fade, entry->uniforms.height_fade, draw_uniforms.height_fade, 1);
+	uniform_vec4(entry->shield_honeycomb, entry->uniforms.shield_honeycomb[0], draw_uniforms.shield_honeycomb[0], 3);
 	return entry;
 }
 

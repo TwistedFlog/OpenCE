@@ -1,7 +1,8 @@
 # Shield Look
 
-Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default)
-or ENHANCED. The former ENHANCED 2 profile is now the sole ENHANCED look.
+Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default),
+ENHANCED, CLASSIC WITH SPRINKLES or HONEYCOMB. The former ENHANCED 2 profile
+is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
 small outward body flare, overriding map-authored shield modifiers except custom colour. This is a local rendering feature in `port/linux/game/shield_look.c`.
@@ -673,3 +674,70 @@ disposable output; all 341 generated save/profile files were archived with
 SHA-256 verification and relative paths. About 11 MiB of evidence, logs and
 scripts remain under `build/shield-retreat`, with required platform builds
 and toolchains retained. Original maps and user saves were untouched.
+
+
+## HONEYCOMB
+
+`display.shield_look = "honeycomb"` (or `HALO_SHIELD_LOOK=honeycomb`)
+selects a newly authored procedural surface inspired by the user's Infinite
+reference image. It is not an extracted Infinite shader or texture. The
+hexagonal lines have broad luminous edges, moving bright patches, and a faint
+connecting film. At the user's request the surface is thicker visually;
+the approved ENHANCED stand-off from the armour is unchanged.
+
+The immutable body/arms profiles retain ENHANCED's exact parameters. The
+cache key additionally records honeycomb ownership so switching presets
+cannot restyle queued draws or mutate another preset. The existing colour
+inheritance, Arm Shields pass and cap, depleted Bigass arcs, recharge/retreat,
+and separate Overshield control remain responsible for their own behaviour.
+No mod, map-family loader, gameplay or network state changes are involved.
+
+The current plasma noise cannot produce a structured hexagonal surface.
+A minimal `port:` hook around the plasma draw therefore supplies and clears
+draw-local surface uniforms and uses the same front-face culling as the
+opaque model, restoring the plasma culling state afterwards.
+`shield_honeycomb_gl.h` owns the GLSL pattern; `d3d8_gl.c` transports its
+uniforms and `nv2a_psh.c` includes the extension. `nv2a_vsh.c` carries the
+existing model UVs in one extra varying (zero for fixed-function draws).
+This is necessary because the plasma outputs contain volume noise coordinates,
+not the model UVs. One grid follows the skin through animation, without the
+intersecting projections from the first prototype. Pixel derivatives soften
+thin edges. Original UV island seams and texel-density differences can remain
+on arbitrary custom models; this does not re-unwrap or replace map geometry.
+
+The procedural pass uses the already resolved colour constants (including
+map/object colours and Overshield precedence), the existing shield intensity
+and height fade. Its colour is 65% perpendicular / 35% parallel; the structured
+surface has its own visibility instead of the plasma noise's angle-dependent
+cutoff. Scale zero returns the original fragment result unchanged, including
+for all other presets and unrelated map materials. The state is cleared after
+each plasma draw; no texture allocation or map-owned resource is introduced.
+
+Validation: 126 focused shield/menu/harness checks pass, including exact
+ENHANCED profile parameters, preset ownership, draw-uniform clearing and Arm
+Shields suppression. Clean Windows, Android and web production builds pass.
+Windows captures cover body/arms damage, depleted arcs, recharge and retreat,
+an Arm Shields OFF control, CE Coldsnap 20th's red colour and MCC Mercury
+Falling's starting-player gold. These are bounded isolated fixtures retaining
+the maps' rendering assets, not full campaign or arbitrary-model validation.
+The comparison contains 282 shared body times and 314 shared arm times with
+zero recorded time difference. Weapon poses can differ between runs; matching
+simulation time is not proof of pixel-identical animation. The video decodes
+successfully and representative frames were inspected.
+
+CLASSIC, ENHANCED and CLASSIC WITH SPRINKLES were also captured against the
+previous renderer. Their profiles and disabled procedural path are unchanged;
+the captures are not pixel-identical (maximum sampled whole-frame mean RGB
+differences of 0.121, 0.309 and 1.262 respectively on a 0-255 scale). A local
+two-peer HONEYCOMB-host/CLASSIC-client check passed 26 compared seconds,
+778 samples without drift and zero client corrections. No network version
+change is needed for draw-only state. Android/browser runtime visuals,
+internet transport, live split-screen, a full Overshield pickup sequence and
+runtime map-family transitions were not retested in this assignment.
+
+Cleanup removed 32.9 GiB of temporary captures, test binaries, fixtures and
+caches. All 992 generated save/profile files were archived with relative
+paths and verified SHA-256 hashes before removing loose copies. About 37 MiB
+of evidence, logs, scripts and archived saves remain in
+`build/shield-honeycomb`; production builds and installed toolchains remain.
+Original maps and user saves were untouched.

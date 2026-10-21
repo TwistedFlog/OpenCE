@@ -83,6 +83,7 @@ struct shield_look_entry
 	struct shader const *authored_modifier;
 	boolean eligible;
 	boolean sprinkles;
+	boolean honeycomb;
 	struct shield_look_plasma body;
 	struct shield_look_plasma arms;
 };
@@ -98,7 +99,7 @@ static boolean shield_look_enabled(void)
 {
 	char const *value = config_string("display.shield_look");
 	return value && (!strcmp(value, "enhanced") || !strcmp(value, "enhanced2") ||
-		!strcmp(value, "classic_with_sprinkles"));
+		!strcmp(value, "classic_with_sprinkles") || !strcmp(value, "honeycomb"));
 }
 
 static uint32_t shield_look_hash(uint32_t hash, void const *data, size_t size)
@@ -236,10 +237,12 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	long shader_index;
 	long noise_index;
 	boolean sprinkles;
+	boolean honeycomb;
 
 	if (!shield_look_enabled())
 		return NULL;
 	sprinkles = !strcmp(config_string("display.shield_look"), "classic_with_sprinkles");
+	honeycomb = !strcmp(config_string("display.shield_look"), "honeycomb");
 	object = object_try_and_get(object_index);
 	if (!object || object->object.type != _object_type_biped)
 		return NULL;
@@ -247,7 +250,7 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	{
 		entry = &shield_looks[index];
 		if (entry->definition_index == object->definition_index && entry->hands_index == hands_index &&
-			entry->sprinkles == sprinkles)
+			entry->sprinkles == sprinkles && entry->honeycomb == honeycomb)
 			return entry->eligible ? entry : NULL;
 	}
 	/* Refuse overflow rather than recycling memory still used by a draw. */
@@ -257,6 +260,7 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	entry->definition_index = object->definition_index;
 	entry->hands_index = hands_index;
 	entry->sprinkles = sprinkles;
+	entry->honeycomb = honeycomb;
 	definition = object_definition_get(object->definition_index);
 	if (!cache_file_tag_cache_contains(definition, sizeof(*definition)))
 		return NULL;
@@ -395,6 +399,21 @@ boolean shield_look_colors(struct shader const *shader, real_rgb_color const *co
 		return TRUE;
 	}
 	return FALSE;
+}
+
+/* Identity comes from the retained draw profile, never a global menu value:
+queued draws may outlive a setting change. */
+real shield_look_honeycomb_scale(struct shader const *shader)
+{
+	short index;
+	for (index = 0; index < shield_look_count; index++)
+	{
+		struct shield_look_entry const *entry = &shield_looks[index];
+		if (entry->eligible && entry->honeycomb &&
+			(shader == &entry->body.shader || shader == &entry->arms.shader))
+			return shader == &entry->arms.shader ? 180.f : 70.f;
+	}
+	return 0.f;
 }
 
 void shield_look_reset(void)

@@ -139,6 +139,9 @@ boolean shield_look_colors(struct shader const *shader, real_rgb_color const *co
 	real_rgb_color *perpendicular, real_rgb_color *parallel);
 /* port: port/linux/src/d3d8_gl.c */
 void d3d8_gl_set_height_fade(float inverse_softness, float height, float offset, float scale);
+/* port: draw-local mapping for port/linux/src/shield_honeycomb_gl.h */
+void d3d8_gl_set_shield_honeycomb(float scale, float time,
+	const float *difference, const float *parallel);
 
 /* ---------- globals */
 
@@ -171,6 +174,7 @@ void rasterizer_plasma_energy_draw(
 	real fade_inverse_softness;
 	real fade_height;
 	boolean overshield;
+	real honeycomb_scale; /* port: shield_look.c owns the body/arms cell density. */
 
 	match_assert(
 		"c:\\halo\\SOURCE\\rasterizer\\xbox\\rasterizer_xbox_plasma_energy.c",
@@ -353,9 +357,22 @@ void rasterizer_plasma_energy_draw(
 		plus the animation's offset) */
 		if (overshield && fade_inverse_softness > 0.0f && primary_scale != 0.0f)
 			d3d8_gl_set_height_fade(fade_inverse_softness, fade_height, vertex_constants[2][3], primary_scale);
+		/* port: only the selected feature-owned surface uses the procedural
+		honeycomb on its existing UVs, with no overlapping rear shell. */
+		honeycomb_scale = shield_look_honeycomb_scale(group->shader);
+		if (honeycomb_scale > 0.f)
+		{
+			IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
+			d3d8_gl_set_shield_honeycomb(honeycomb_scale, global_frame_parameters.game_time_sec,
+				color_constants[1], color_constants[2]);
+		}
 		rasterizer_transparent_geometry_group_draw__internal(
 			(struct transparent_geometry_group const *)group,
 			FALSE);
+		/* port: do not leak the surface or its one-sided shell into subsequent draws. */
+		if (honeycomb_scale > 0.f)
+			IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_NONE);
+		d3d8_gl_set_shield_honeycomb(0.f, 0.f, NULL, NULL);
 		if (overshield)
 			d3d8_gl_set_height_fade(0.0f, 0.0f, 0.0f, 0.0f);
 	}

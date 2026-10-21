@@ -181,6 +181,34 @@ int main(int argc, char **argv)
         reference_pixels[0] ^= 1; read_failed = 1; CHECK(!shield_look_read_noise(3)); free(reference_pixels);
         return 0;
     }
+    if (!strcmp(argv[1], "honeycomb")) {
+        struct shader *enhanced, *honeycomb, *arms;
+        struct shield_look_plasma saved;
+        enhanced = shield_look_body(0, &stock.shader);
+        saved = *(struct shield_look_plasma *)enhanced;
+        CHECK(!shield_look_honeycomb_scale(enhanced));
+        setting = "honeycomb";
+        honeycomb = shield_look_body(0, &stock.shader);
+        CHECK(honeycomb != enhanced && shield_look_honeycomb_scale(honeycomb) == 70.f);
+        CHECK(!memcmp(honeycomb, &saved, sizeof(saved)));
+        CHECK(draw_arms(0, 0, 7, &effect));
+        arms = effect.modifier_shader;
+        CHECK(shield_look_honeycomb_scale(arms) == 180.f);
+        CHECK(effect.modifier_animation.values == arm_values[0]);
+        arm_setting = 0; CHECK(!draw_arms(0, 0, 7, &effect));
+        CHECK(!effect.modifier_shader);
+        setting = "classic_with_sprinkles";
+        CHECK(!shield_look_honeycomb_scale(shield_look_body(0, &stock.shader)));
+        CHECK(shield_look_honeycomb_scale(honeycomb));
+        setting = "enhanced";
+        CHECK(shield_look_body(0, &stock.shader) == enhanced);
+        CHECK(!memcmp(enhanced, &saved, sizeof(saved)));
+        setting = "classic";
+        CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
+        CHECK(!shield_look_honeycomb_scale(&stock.shader));
+        shield_look_reset(); CHECK(!shield_look_honeycomb_scale(honeycomb));
+        return 0;
+    }
     if (!strcmp(argv[1], "sprinkles")) {
         struct shield_look_plasma enhanced, saved, *p;
         struct shader *previous;

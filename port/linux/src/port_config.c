@@ -143,8 +143,8 @@ static const struct config_setting config_settings[] =
 		"overrides map shield styling, preserving custom colour, with CMT body and\n"
 		"first-person shields and a small body flare. CLASSIC preserves the\n"
 		"map look. \"classic_with_sprinkles\" uses the classic surface with\n"
-		"enhanced layers, arcs and recharge. Arm Shields controls all arms.\n"
-		"Local drawing only; independent of mods." },
+		"enhanced layers, arcs and recharge. \"honeycomb\" adds a hexagonal surface.\n"
+		"Arm Shields controls all arms. Local drawing only; independent of mods." },
 	{ "display.viewmodel_shield", _config_boolean, "false", "HALO_VIEWMODEL_SHIELD", _environment_value, _platform_all,
 		"The energy shield's flare on the first-person arms too, as on the body\n"
 		"(the stock game draws it on the body only)." },
@@ -1508,7 +1508,7 @@ static const struct
 	{ "display.resolution_scaling", { "native", "original", NULL }, NULL },
 	{ "display.anti_aliasing", { "off", "fxaa", "smaa", "ssaa2x", "msaa2x", "msaa4x", "msaa8x", NULL }, NULL },
 	{ "display.hud_button_style", { "classic", "gems", "menu_gems", NULL }, NULL },
-	{ "display.shield_look", { "classic", "enhanced", "classic_with_sprinkles", NULL }, NULL },
+	{ "display.shield_look", { "classic", "enhanced", "classic_with_sprinkles", "honeycomb", NULL }, NULL },
 	{ "display.menus", { "pc", "xbox", NULL }, NULL },
 	{ "display.player_names", { "all", "allies", "enemies", "none", NULL }, NULL },
 	{ "display.scoreboard_team_layout", { "teams", "score", NULL }, NULL },
