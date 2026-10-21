@@ -564,6 +564,8 @@ void first_person_weapon_draw(
 							first_person_interface->hands.index, model_node_matrices, &model_effect);
 						shield_look_arms(render.local_player_index, unit_index,
 							first_person_interface->hands.index, &model_effect);
+						/* port: recharge also requires the Arm Shields pass. */
+						shield_recharge_prepare(unit_index, &model_effect, TRUE);
 						/* port: Arm Shields also owns depleted first-person arcs. */
 						shield_arcs_draw(unit_index, first_person_interface->hands.index,
 							model_node_matrices, &model_effect, TRUE);

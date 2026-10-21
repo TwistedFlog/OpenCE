@@ -13,6 +13,10 @@ boolean shield_look_colors(struct shader const *shader, union real_rgb_color con
 void shield_arcs_unload(void);
 void shield_arcs_draw(long object_index, long model_index, struct real_matrix4x3 const *nodes,
 	struct render_model_effect const *effect, boolean arms);
+void shield_recharge_reset(void);
+void shield_recharge_prepare(long object_index, struct render_model_effect const *effect, boolean arms);
+boolean shield_recharge_visible(struct shader const *shader, real const *values);
+void shield_recharge_draw(struct shader const *shader, real const *values, real *intensity, real *offset);
 void shield_look_reset(void);
 boolean shield_look_skip_shell(struct model const *model, struct shader const *surface);
 struct shader *shield_look_body(long object_index, struct shader *original);

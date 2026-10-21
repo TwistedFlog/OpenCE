@@ -516,3 +516,56 @@ About 18 MiB of evidence, logs and scripts remain; the current platform
 builds and installed toolchains are retained. The local runtime bundle was
 installed in the user's Gulch data root. No original maps or saves were
 changed.
+
+
+## Recharge layer
+
+ENHANCED now reuses its approved plasma profile during actual normal shield
+regeneration. The drawing envelope follows shield vitality, easing from 30%
+of the existing offset to a subtle body peak 15% above the approved offset.
+First-person growth remains within the existing Arm Shields offset/FOV cap.
+The layer fades in over the first 6% of shield vitality and contracts/fades
+for half a second after reaching full charge. Outside recharge, the approved
+hit appearance is unchanged. CLASSIC and map-authored colour selection are
+unchanged; animated Overshields retain their separate state and colours.
+
+`shield_recharge.inl` owns all state and envelope calculations. It reads
+shield charging, stun, vitality and death state without modifying simulation
+or consuming gameplay randomness. Damage, depletion, death and Overshield
+charging cancel it. Map reset, setting changes, time rewind, stale objects
+and reused first-person pointers invalidate state. Full shields on initial
+visibility do not trigger a completion pulse. Capacity exhaustion falls back
+to ordinary rendering.
+
+Minimal `port:` hooks register the selected body/arms modifier before model
+submission, retain the transparent pass when ordinary hit intensity is zero,
+and apply the envelope at the existing plasma draw. Feature code alone cannot
+observe those draw packets or prevent their early rejection. Existing shader
+values pointers remain intact for Arm Shields and Overshield ownership. No
+map loading, conversion or MCC boundary changes are needed.
+
+The 98 focused tests cover progression/retreat, cancellation, arm offset caps,
+pointer reuse, capacity, stale frames and cleanup, alongside existing profile,
+colour, Overshield and depleted-arc tests. Windows, Android guest/host and web
+release builds pass. The Windows captures compare the preceding committed
+build with recharge enabled, including Arm Shields OFF. Android/browser
+runtime visuals and live split-screen have not been tested.
+
+Windows in-game checks exercised recharge on Xbox Beaver Creek, CE Coldsnap
+20th Anniversary XL and MCC Mercury Falling. Coldsnap retains its authored
+red plasma colour; Mercury's starting player retains its existing gold
+palette. Mercury uses the same isolated dormant-script fixture described
+above. These are targeted visual checks, not full map/campaign validation.
+
+A hidden ENHANCED-host/CLASSIC-client local network run passed the repository
+comparator: 26 seconds at matching ticks, no mismatched seconds and no drift
+across 780 samples. No protocol or simulation changes require a network
+version bump. Internet/WebRTC transport was not retested. Captures, logs and
+the before/after video are retained under `build/shield-recharge/evidence`.
+
+The CLASSIC in-game control remains clear during recharge. Cleanup removed
+about 8.7 GiB of temporary fixtures, duplicate binaries and raw captures.
+All 310 generated save/profile files were archived losslessly with SHA-256
+verification and their original relative paths recorded. About 27 MiB of
+logs, evidence and scripts remain, alongside required platform builds and
+toolchains. Original maps and user saves were untouched.

@@ -42,6 +42,8 @@ symbols in this file:
 #include "rasterizer/rasterizer_console_vars.h"
 #include "viewmodel_shield.h" /* port: port/linux/game/viewmodel_shield.c */
 
+#include "shield_look.h" /* port: port/linux/game/shield_look.c */
+
 /* ---------- constants */
 
 /* ---------- macros */
@@ -208,6 +210,9 @@ void rasterizer_plasma_energy_draw(
 				offset = viewmodel_shield_offset_amount(runtime->exponents, offset);
 			}
 		}
+
+		/* port: the selected recharge envelope preserves colours and arm limits. */
+		shield_recharge_draw(group->shader, runtime ? runtime->exponents : NULL, &intensity, &offset);
 
 		/* port: preserve the separate overshield effect
 		(port/linux/game/overshield_effect.c) */

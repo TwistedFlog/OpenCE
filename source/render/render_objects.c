@@ -541,6 +541,8 @@ static void render_object_list(
 								TEST_FLAG(_object_mask_unit, object->object.type) ?
 									overshield_effect_values(object_index, object->object.outgoing_function_values) :
 									object->object.outgoing_function_values;
+							/* port: register the selected recharge layer before submission. */
+							shield_recharge_prepare(object_index, &model_effect, FALSE);
 						}
 						else
 						{

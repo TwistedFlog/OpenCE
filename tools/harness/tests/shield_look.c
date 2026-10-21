@@ -23,6 +23,7 @@ typedef struct { real red, green, blue; } real_rgb_color;
 typedef struct { real i, j, k; } real_vector3d;
 struct tag_reference { unsigned long group_tag; char *name; long name_length, index; };
 struct tag_block { long count; void *address; void *definition; };
+void shield_recharge_reset(void) {} /* separate draw-envelope dependency */
 #include "real_types.inc"
 struct object_definition { struct {
     struct tag_reference model, modifier_shader;

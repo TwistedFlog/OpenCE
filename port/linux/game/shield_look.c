@@ -371,6 +371,7 @@ boolean shield_look_colors(struct shader const *shader, real_rgb_color const *co
 
 void shield_look_reset(void)
 {
+	shield_recharge_reset();
 	memset(shield_looks, 0, sizeof(shield_looks));
 	shield_look_count = 0;
 	shield_look_noise_searched = FALSE;
@@ -434,3 +435,5 @@ boolean shield_look_skip_shell(struct model const *model, struct shader const *s
 }
 
 #include "shield_arcs.inl"
+
+#include "shield_recharge.inl"
