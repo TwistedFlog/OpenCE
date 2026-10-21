@@ -138,6 +138,13 @@ static const struct config_setting config_settings[] =
 		"Off, they are not drawn; firing, animation, sound and lights go on." },
 	{ "display.passenger_third_person", _config_boolean, "false", "HALO_PASSENGER_THIRD_PERSON", _environment_value, _platform_all,
 		"Third-person Warthog and Scorpion passengers. Weapon zoom is disabled." },
+	{ "display.shield_look", _config_string, "\"classic\"", "HALO_SHIELD_LOOK", _environment_value, _platform_all,
+		"Shield appearance: \"classic\" keeps the map's own look; \"enhanced\"\n"
+		"overrides map shield styling, preserving custom colour, with CMT body and\n"
+		"first-person shields and a small body flare. CLASSIC preserves the\n"
+		"map look. \"classic_with_sprinkles\" uses the classic surface with\n"
+		"enhanced layers, arcs and recharge. \"honeycomb\" adds a hexagonal surface.\n"
+		"Arm Shields controls all arms. Local drawing only; independent of mods." },
 	{ "display.viewmodel_shield", _config_boolean, "false", "HALO_VIEWMODEL_SHIELD", _environment_value, _platform_all,
 		"The energy shield's flare on the first-person arms too, as on the body\n"
 		"(the stock game draws it on the body only)." },
@@ -417,7 +424,8 @@ static const struct config_setting config_settings[] =
 	{ "display.overshield_effect", _config_boolean, "false", "HALO_OVERSHIELD_EFFECT", _environment_value, _platform_all,
 		"The overshield as this machine draws it: its flare rising up the body as\n"
 		"it charges (2 seconds, 3 from a shield that was down) and staying lit,\n"
-		"its energy slower, in its own color (the powerup's); a hit on it plays\n"
+		"its energy slower: green above 200% shields, reddish-pink below.\n"
+		"Arms also require Arm Shields. A hit on it plays\n"
 		"what the projectile plays on an Elite's shield. Only what is drawn\n"
 		"and heard changes." },
 
@@ -1500,6 +1508,7 @@ static const struct
 	{ "display.resolution_scaling", { "native", "original", NULL }, NULL },
 	{ "display.anti_aliasing", { "off", "fxaa", "smaa", "ssaa2x", "msaa2x", "msaa4x", "msaa8x", NULL }, NULL },
 	{ "display.hud_button_style", { "classic", "gems", "menu_gems", NULL }, NULL },
+	{ "display.shield_look", { "classic", "enhanced", "classic_with_sprinkles", "honeycomb", NULL }, NULL },
 	{ "display.menus", { "pc", "xbox", NULL }, NULL },
 	{ "display.player_names", { "all", "allies", "enemies", "none", NULL }, NULL },
 	{ "display.scoreboard_team_layout", { "teams", "score", NULL }, NULL },
@@ -1539,6 +1548,13 @@ static void config_check_words(void)
 		if (index < 0 || !(config_settings[index].platforms & CONFIG_PLATFORM))
 			continue;
 		value = &config_values[index];
+		/* Preserve the approved shield profile from the earlier playtest. */
+		if (!strcmp(config_words[word_index].name, "display.shield_look") &&
+			config_word_is(value->string, strlen(value->string), "enhanced2"))
+		{
+			free(value->string);
+			value->string = strdup("enhanced");
+		}
 		for (word = 0; words[word] && !config_word_is(value->string, strlen(value->string), words[word]); word++)
 		{
 		}

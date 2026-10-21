@@ -375,6 +375,7 @@ void render_objects(
 
 /* port: port/linux/game/overshield_effect.c */
 real const *overshield_effect_values(long unit_index, real const *values);
+#include "shield_look.h" /* port: port/linux/game/shield_look.c */
 
 void render_object_shadows(
 	void)
@@ -530,6 +531,8 @@ static void render_object_list(
 						if (shader_type_is_valid_for_modifier(
 							model_effect.modifier_shader->base.type))
 						{
+							/* port: selected shield profile; CLASSIC preserves the map shader. */
+							model_effect.modifier_shader = shield_look_body(object_index, model_effect.modifier_shader);
 							model_effect.modifier_animation.colors =
 								object->object.outgoing_change_colors;
 							/* port: an overshield as it rises and lasts
@@ -538,6 +541,8 @@ static void render_object_list(
 								TEST_FLAG(_object_mask_unit, object->object.type) ?
 									overshield_effect_values(object_index, object->object.outgoing_function_values) :
 									object->object.outgoing_function_values;
+							/* port: register the selected recharge layer before submission. */
+							shield_recharge_prepare(object_index, &model_effect, FALSE);
 						}
 						else
 						{
@@ -628,6 +633,11 @@ static void render_object_list(
 						object->object.forced_shader_permutation_index,
 						(data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0) |
 						(legs_node_matrices ? FIRST_PERSON_LEGS_RENDER_FLAG : 0)); /* port: private lower-body geometry */
+
+					/* port: draw-only depleted shield arcs; no first-person leg duplicates. */
+					if (!data->shadow && !legs_node_matrices)
+						shield_arcs_draw(object_index, definition->object.model.index,
+							object_get_node_matrices(object_index), &model_effect, FALSE);
 
 					if (debug_objects)
 					{

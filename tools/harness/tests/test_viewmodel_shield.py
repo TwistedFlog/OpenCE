@@ -38,7 +38,7 @@ def plasma_calculation():
     source = read("source/rasterizer/xbox/rasterizer_xbox_plasma_energy.c")
     draw = function(source, "rasterizer_plasma_energy_draw")
     start = draw.index("tint = global_real_rgb_white;")
-    end = draw.index("/* port: preserve the separate overshield effect", start)
+    end = draw.index("/* port: the selected recharge envelope", start)
     return "\n".join([
         structure(source, "plasma_runtime_parameters"),
         structure(source, "shader_transparent_plasma_definition"),

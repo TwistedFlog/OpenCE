@@ -64,6 +64,7 @@ symbols in this file:
 /* ---------- headers */
 
 #include "cseries.h"
+#include "shield_look.h" /* port: port/linux/game/shield_look.c */
 #include "cseries/errors.h"
 #include "cseries/profile.h"
 #include "models.h"
@@ -351,6 +352,9 @@ static void render_model_parts(
 							part->shader_index,
 							struct model_shader_reference);
 						shader = shader_definition_get(shader_reference->shader.index);
+						/* port: selected shield looks replace authored plasma shells. */
+						if (shield_look_skip_shell(model, shader))
+							continue;
 
 						if (shader_type_is_valid_for_model(shader->base.type) &&
 							!TEST_FLAG(part->flags, _model_geometry_part_stripped_bit))
