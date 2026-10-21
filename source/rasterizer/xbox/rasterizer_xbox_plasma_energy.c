@@ -132,6 +132,9 @@ void rasterizer_set_pixel_shader(
 /* port: port/linux/game/overshield_effect.c */
 boolean overshield_effect_draw(real const *values, real *energy_speed, real *inverse_softness, real *height);
 boolean overshield_effect_color(real const *values, real_rgb_color *perpendicular, real_rgb_color *parallel);
+/* port: port/linux/game/shield_look.c */
+boolean shield_look_colors(struct shader const *shader, real_rgb_color const *colors,
+	real_rgb_color *perpendicular, real_rgb_color *parallel);
 /* port: port/linux/src/d3d8_gl.c */
 void d3d8_gl_set_height_fade(float inverse_softness, float height, float offset, float scale);
 
@@ -210,6 +213,10 @@ void rasterizer_plasma_energy_draw(
 		(port/linux/game/overshield_effect.c) */
 		perpendicular_color = plasma->perpendicular_color;
 		parallel_color = plasma->parallel_color;
+		/* port: inherit authored hue only on feature-owned shield draws.
+		Overshield layer colours retain precedence. */
+		shield_look_colors(group->shader, runtime ? runtime->colors : NULL,
+			&perpendicular_color, &parallel_color);
 		if (runtime && overshield_effect_color(runtime->exponents, &perpendicular_color, &parallel_color))
 		{
 			tint = global_real_rgb_white;

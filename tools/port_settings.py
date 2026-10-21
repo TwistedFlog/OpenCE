@@ -247,7 +247,7 @@ SCREENS["video_settings/fov_viewmodels"] = {
         ("PASSENGER THIRD PERSON:", "display.passenger_third_person", ON_OFF,
          "Third-person Warthog and Scorpion passengers in\nthe campaign and co-op. Weapon zoom is disabled.", None),
         ("SHIELD LOOK:", "display.shield_look", [("CLASSIC", "classic"), ("ENHANCED", "enhanced")],
-         "Classic keeps map shields. Enhanced overrides them.\nArm Shields controls the enhanced first-person layer.", None),
+         "Classic keeps map shields. Enhanced keeps custom colour.\nArm Shields controls the enhanced first-person layer.", None),
         ("ARM SHIELDS:", "display.viewmodel_shield", ON_OFF,
          "The energy shield's flare on your first-person\narms too, as on your body.", None),
         ("LEGS:", "display.first_person_legs", ON_OFF,

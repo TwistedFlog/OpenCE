@@ -4,7 +4,7 @@ Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default)
 or ENHANCED. The former ENHANCED 2 profile is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
-small outward body flare, overriding map-authored shield modifiers. This is a local rendering feature in `port/linux/game/shield_look.c`.
+small outward body flare, overriding map-authored shield modifiers except custom colour. This is a local rendering feature in `port/linux/game/shield_look.c`.
 It does not use the mod loader or change simulation, shield strength, damage,
 network messages, map tags, models or cache files. No network-version change
 is required.
@@ -13,7 +13,7 @@ CLASSIC leaves the established drawing paths intact. Arm Shields is
 now authoritative for the added first-person pass in every SHIELD LOOK
 mode: OFF adds no arm shield; ON supplies the stock displacement and its
 distance/FOV-based cap. ENHANCED restyles that pass with the CMT pattern and
-colors while preserving its animation values and overshield handling.
+custom map colour (where present) while preserving its animation values and overshield handling.
 CLASSIC preserves authored map shields. ENHANCED replaces authored shield
 modifiers and omits their duplicate plasma model shells. Overshield Effect remains an
 independent, opt-in visual modifier.
@@ -66,7 +66,7 @@ replace another map's models to make their silhouettes match CMT's.
 
 ENHANCED now uses the approved former ENHANCED 2 appearance exactly. The
 body displacement is outgoing hit intensity B, exponent 0.5 and amount
-0.0125 world units (about 3.8 cm at full intensity). The CMT pattern, colors, animation and brightness remain unchanged.
+0.0125 world units (about 3.8 cm at full intensity). The CMT pattern, animation and brightness remain unchanged; custom authored hue can replace the preset gold.
 The first-person offset now follows Arm Shields, as described below.
 The former skin-tight body option and separate SHIELD LOOK submenu are gone.
 
@@ -105,6 +105,39 @@ animated overshield resolves its intensity channel from that selected profile.
 Resource discovery and private shader copies reset before map load/unload.
 CLASSIC bypasses discovery and overrides; selecting ENHANCED again reuses
 stable per-map copies. Original map resources remain owned by their loaders.
+
+## Authored colour inheritance
+
+The feature-owned draw copies retain every approved profile field. A guarded
+`shield_look_colors` call changes only the draw-local perpendicular and parallel
+RGB constants immediately before the existing Overshield colour operation.
+It identifies an eligible body/arms copy by pointer; CLASSIC, unrelated plasma,
+non-plasma source modifiers and unregistered draws do not inherit colour.
+
+Static authored RGB is supported, as are plasma colour sources 1 through 4
+resolved from the current draw's object colours. The source RGB is multiplied
+by that channel, then each nonblack endpoint is normalized to the corresponding
+preset maximum RGB component. This preserves preset peak brightness rather
+than importing authored opacity or intensity. A black endpoint uses the other
+endpoint's hue; two black/unusable endpoints retain the preset. Missing or
+invalid colour channels retain the preset. No texture pixels are sampled to
+invent a colour for non-plasma or texture-baked effects.
+
+Known stock cyborg and elite RGB pairs and the approved CMT pair (with no
+colour channel) preserve preset gold. Comparison uses numeric colour data,
+with a 0.00001 tolerance, not tag names or a map-name exception. Consequently,
+a map that reuses the stock colour pair retains gold even if it customizes
+other shader fields. The shader's other authoring does not imply a custom hue.
+Future profiles registered in this feature can use the same colour resolver.
+
+This draw-time hook is necessary for per-object colour channels: cached copies
+are shared by instances of a biped definition, and mutating their RGB per unit
+would leak colour between deferred or split-screen draws. The shared addition
+contains no colour logic and uses existing validated runtime tags and draw
+colours. Xbox/CE/MCC loaders, resource ownership and cleanup are unchanged.
+The existing Overshield operation runs last and remains authoritative; Arm
+Shields still controls visibility and displacement. No simulation or network
+contract changes, so no network-version bump is needed.
 
 ## Necessary shared hooks
 
@@ -345,3 +378,49 @@ and test saves are archived with verified hashes. Android/browser gameplay,
 live split-screen, and two-machine networking were not repeated. Production
 changes only affect local rendering and menu help, with no protocol or
 simulation changes.
+
+
+## Colour inheritance validation (2026-10-21)
+
+Compared against `8a4c23c8` in hidden Windows release runs at 1280x960
+(stock 640x480 rendering), with screenshots and logs retained locally in
+`build/shield-colour/evidence`. No retail map or texture is committed.
+
+- Coldsnap 20th Anniversary XL RC5: player `characters\scyborg\scyborg`,
+  plasma `characters\ncyborg\shaders\nshield hit`, perpendicular white,
+  parallel black, colour source 3. ENHANCED inherits the red team's hue on
+  body and arms while retaining its pattern and layer. CLASSIC retains the
+  map's original shield; Arm Shields OFF removes the enhanced arm pass.
+- Mercury Falling (`mercury_falling.map`, the user-confirmed map): the
+  player's `characters\cyborg\shaders\shield hit` has the stock
+  orange/blue pair and colour source 0. Both the tag inspection and CLASSIC
+  render confirm this. ENHANCED therefore retains gold on body and arms;
+  there is no map-name-based blue override. Mercury 2's blue Spartan-boss
+  shader is a different map/character and was not substituted.
+- Xbox Beaver Creek: before/after ENHANCED retains the approved gold body
+  appearance. The CMT reference test still compares all approved body and
+  arm rendering fields byte-for-byte.
+
+Test-only copies fixed spawn positions and added a small damage reference.
+Mercury startup/continuous scripts were made dormant and its B function was
+held steady for material comparison after scripted damage did not expose a
+shield. Its colour fields, textures, models and profile parameters were not
+changed. The original maps and saves were untouched. The original long
+Mercury package path failed in local network-test setup; an isolated short
+`mcc_maps/mr` package loaded successfully. Both reference and changed builds
+emit existing Mercury sound/tag diagnostics, visible in the captures. These
+runs establish the compared material behaviour, not full campaign support.
+
+The 71 focused shield, Overshield and Arm Shields tests pass, including
+fixed and per-object colour inheritance, tiny/invalid/unavailable colour
+fallbacks, unchanged cached shader bytes, CLASSIC and unrelated-draw bypass,
+map reset, existing toggle/split/capacity cases, and Overshield hook ordering.
+Windows, Android guest/host target and web release builds pass. Android and
+browser gameplay, live split-screen, two-machine co-op and full campaigns
+were not rerun for this render-only change. No network or simulation data
+changed. Screenshots are visual comparisons; differences in frame timing
+mean they are not claimed to be pixel-identical.
+
+Disposable map fixtures, per-run executables, caches and redundant captures were
+removed. Test saves were archived losslessly with verified SHA-256 hashes;
+selected screenshots and useful logs remain in the evidence directory.

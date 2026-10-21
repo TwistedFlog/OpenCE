@@ -140,7 +140,7 @@ static const struct config_setting config_settings[] =
 		"Third-person Warthog and Scorpion passengers. Weapon zoom is disabled." },
 	{ "display.shield_look", _config_string, "\"classic\"", "HALO_SHIELD_LOOK", _environment_value, _platform_all,
 		"Shield appearance: \"classic\" keeps the map's own look; \"enhanced\"\n"
-		"overrides map-authored plasma shields with CMT-style gold body and\n"
+		"overrides map shield styling, preserving custom colour, with CMT body and\n"
 		"first-person shields and a small body flare. CLASSIC preserves the\n"
 		"map look. Arm Shields controls the enhanced first-person layer.\n"
 		"Local drawing only; independent of mods." },

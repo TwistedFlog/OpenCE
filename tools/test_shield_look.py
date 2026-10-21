@@ -51,7 +51,7 @@ def shield_tool(tmp_path_factory):
     return output
 
 
-@pytest.mark.parametrize("case", ["classic", "invalid-setting", "profiles", "authored-shader", "authored-noise",
+@pytest.mark.parametrize("case", ["colors", "classic", "invalid-setting", "profiles", "authored-shader", "authored-noise",
                                   "authored-function", "authored-channel", "authored-nonplasma", "authored-environment", "authored-hands", "authored-body", "authored-decal", "missing", "no-noise", "split",
                                   "toggle", "outer", "arms-off", "reload", "capacity", "malformed-noise"])
 @pytest.mark.parametrize("look", ["enhanced", "enhanced2"])
@@ -94,6 +94,9 @@ def test_shared_hooks():
     assert "shield_look_reset();" in function(cache, "scenario_tags_unload")
     models = (ROOT / "source/models/models.c").read_text()
     assert "shield_look_skip_shell(model, shader)" in function(models, "render_model_parts")
+    plasma = (ROOT / "source/rasterizer/xbox/rasterizer_xbox_plasma_energy.c").read_text()
+    draw = function(plasma, "rasterizer_plasma_energy_draw")
+    assert draw.index("shield_look_colors(") < draw.index("overshield_effect_color(")
     objects = (ROOT / "source/render/render_objects.c").read_text()
     assert "shield_look_body(object_index, model_effect.modifier_shader)" in objects
 

@@ -282,6 +282,93 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 	return entry;
 }
 
+/* Compare colour data, not tag paths: protected maps can rename tags. */
+static boolean shield_look_color_near(real_rgb_color const *color, real red, real green, real blue)
+{
+	return color->red > red - 0.00001f && color->red < red + 0.00001f &&
+		color->green > green - 0.00001f && color->green < green + 0.00001f &&
+		color->blue > blue - 0.00001f && color->blue < blue + 0.00001f;
+}
+
+static boolean shield_look_default_colors(struct shield_look_plasma const *p)
+{
+	if (p->color_source != 0)
+		return FALSE;
+	return (shield_look_color_near(&p->perpendicular_color, 1.f, 0.545098f, 0.243137f) &&
+		shield_look_color_near(&p->parallel_color, 0.0666667f, 0.0666667f, 1.f)) ||
+		(shield_look_color_near(&p->perpendicular_color, 0.65098f, 1.f, 1.f) &&
+		shield_look_color_near(&p->parallel_color, 0.627451f, 0.215686f, 1.f)) ||
+		(shield_look_color_near(&p->perpendicular_color, 0.909804f, 0.772549f, 0.f) &&
+		shield_look_color_near(&p->parallel_color, 0.937255f, 0.694118f, 0.0627451f));
+}
+
+static real shield_look_color_peak(real_rgb_color const *color)
+{
+	real peak;
+	/* Reject negative, nonfinite and out-of-range authored RGB values. */
+	if (!(color->red >= 0.f && color->red <= 1.f && color->green >= 0.f &&
+		color->green <= 1.f && color->blue >= 0.f && color->blue <= 1.f))
+		return 0.f;
+	peak = color->red > color->green ? color->red : color->green;
+	return peak > color->blue ? peak : color->blue;
+}
+
+static void shield_look_color_apply(real_rgb_color const *color, real_rgb_color *out)
+{
+	real brightness = shield_look_color_peak(out);
+	real peak = shield_look_color_peak(color);
+	out->red = (color->red / peak) * brightness;
+	out->green = (color->green / peak) * brightness;
+	out->blue = (color->blue / peak) * brightness;
+}
+
+/* Draw-local colours preserve per-object channels without mutating cached
+profiles or map tags. Only the two RGB constants change; a black authored
+endpoint borrows the other hue rather than removing the preset's layer. */
+boolean shield_look_colors(struct shader const *shader, real_rgb_color const *colors,
+	real_rgb_color *perpendicular, real_rgb_color *parallel)
+{
+	struct shield_look_plasma const *authored;
+	struct shield_look_entry const *entry;
+	real_rgb_color a, b;
+	real_rgb_color const *tint;
+	short index;
+	if (!shield_look_enabled())
+		return FALSE;
+	for (index = 0; index < shield_look_count; index++)
+	{
+		entry = &shield_looks[index];
+		if (!entry->eligible || (shader != &entry->body.shader && shader != &entry->arms.shader) ||
+			entry->authored_modifier->base.type != 10)
+			continue;
+		authored = (struct shield_look_plasma const *)entry->authored_modifier;
+		if (shield_look_default_colors(authored))
+			return FALSE;
+		a = authored->perpendicular_color;
+		b = authored->parallel_color;
+		if (authored->color_source != 0)
+		{
+			if (!colors || authored->color_source < 1 || authored->color_source > 4)
+				return FALSE;
+			tint = &colors[authored->color_source - 1];
+			if (shield_look_color_peak(tint) == 0.f)
+				return FALSE;
+			a.red *= tint->red; a.green *= tint->green; a.blue *= tint->blue;
+			b.red *= tint->red; b.green *= tint->green; b.blue *= tint->blue;
+		}
+		if (shield_look_color_peak(&a) == 0.f)
+			a = b;
+		if (shield_look_color_peak(&b) == 0.f)
+			b = a;
+		if (shield_look_color_peak(&a) == 0.f)
+			return FALSE;
+		shield_look_color_apply(&a, perpendicular);
+		shield_look_color_apply(&b, parallel);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 void shield_look_reset(void)
 {
 	memset(shield_looks, 0, sizeof(shield_looks));

@@ -180,6 +180,57 @@ int main(int argc, char **argv)
         reference_pixels[0] ^= 1; read_failed = 1; CHECK(!shield_look_read_noise(3)); free(reference_pixels);
         return 0;
     }
+    if (!strcmp(argv[1], "colors")) {
+        struct shield_look_plasma saved;
+        real_rgb_color a, b, original_a, original_b;
+        body = shield_look_body(0, &stock.shader);
+        saved = *(struct shield_look_plasma *)body;
+        original_a = saved.perpendicular_color; original_b = saved.parallel_color;
+        a = original_a; b = original_b;
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        CHECK(!memcmp(&a, &original_a, sizeof(a)));
+        stock.perpendicular_color.red = 0.243137f; stock.perpendicular_color.blue = 1.f;
+        CHECK(shield_look_colors(body, NULL, &a, &b));
+        CHECK(a.blue == original_a.red && b.blue == original_b.red);
+        CHECK(a.red < a.green && a.green < a.blue);
+        CHECK(!memcmp(body, &saved, sizeof(saved)));
+        CHECK(!shield_look_colors(&stock.shader, NULL, &a, &b));
+        stock.color_source = 3;
+        stock.perpendicular_color.red = stock.perpendicular_color.green = stock.perpendicular_color.blue = 1.f;
+        memset(&stock.parallel_color, 0, sizeof(stock.parallel_color));
+        unit.object.outgoing_change_colors[2].blue = 0.4f;
+        a = original_a; b = original_b;
+        CHECK(shield_look_colors(body, unit.object.outgoing_change_colors, &a, &b));
+        CHECK(a.red == 0.f && a.green == 0.f && a.blue == original_a.red);
+        CHECK(b.blue == original_b.red);
+        CHECK(draw_arms(0, 0, 7, &effect));
+        unit.object.outgoing_change_colors[2].blue = 0.f;
+        unit.object.outgoing_change_colors[2].green = 1.f;
+        a = original_a; b = original_b;
+        CHECK(shield_look_colors(effect.modifier_shader, unit.object.outgoing_change_colors, &a, &b));
+        CHECK(a.green == original_a.red && a.blue == 0.f);
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        stock.color_source = 5;
+        CHECK(!shield_look_colors(body, unit.object.outgoing_change_colors, &a, &b));
+        stock.color_source = 0;
+        memset(&stock.perpendicular_color, 0, sizeof(stock.perpendicular_color));
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        stock.perpendicular_color.blue = 1.e-39f;
+        a = original_a; b = original_b;
+        CHECK(shield_look_colors(body, NULL, &a, &b));
+        CHECK(a.blue == original_a.red && a.red == 0.f);
+        stock.perpendicular_color.blue = 1.f;
+        stock.shader.base.type = 6;
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        stock.shader.base.type = 10;
+        CHECK(shield_look_colors(body, NULL, &a, &b));
+        CHECK(!memcmp(body, &saved, sizeof(saved)));
+        setting = "classic";
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        setting = "enhanced"; shield_look_reset();
+        CHECK(!shield_look_colors(body, NULL, &a, &b));
+        return 0;
+    }
     if (!strcmp(argv[1], "classic")) setting = "classic";
     else if (!strcmp(argv[1], "invalid-setting")) setting = "not-a-profile";
     else if (!strcmp(argv[1], "authored-shader")) { stock.primary_scale = 80.f; stock.offset_amount = 0.f; }

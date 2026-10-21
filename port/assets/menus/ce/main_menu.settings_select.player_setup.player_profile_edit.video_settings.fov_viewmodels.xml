@@ -115,7 +115,7 @@
 		<string text="The weapon and hands, horizontal at 16:9.\nDefault keeps the weapon's stock view."/>
 		<string text="Draw first-person weapons, hands and attached\nvisuals. Gameplay and sound continue when off."/>
 		<string text="Third-person Warthog and Scorpion passengers in\nthe campaign and co-op. Weapon zoom is disabled."/>
-		<string text="Classic keeps map shields. Enhanced overrides them.\nArm Shields controls the enhanced first-person layer."/>
+		<string text="Classic keeps map shields. Enhanced keeps custom colour.\nArm Shields controls the enhanced first-person layer."/>
 		<string text="The energy shield's flare on your first-person\narms too, as on your body."/>
 		<string text="Your legs in first person, seen looking down,\nmoving as you run. Your body as others see it."/>
 	</strings>
