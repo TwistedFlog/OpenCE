@@ -623,3 +623,53 @@ Cleanup removed about 4.0 GiB of temporary maps, duplicate binaries and raw
 captures. All 403 generated save/profile files were archived with SHA-256
 verification and original relative paths recorded. About 22 MiB of evidence,
 logs and scripts remain, with required platform builds/toolchains retained.
+
+
+### Sprinkles recharge visibility
+
+The original comparison used independently captured frame numbers, which
+made Sprinkles appear to complete recharge sooner. A synchronized diagnostic
+capture now associates each image with the actual simulation time, recharge
+progress, fade and displacement. At equal simulation times the two presets
+already had the same half-second retreat and layer offsets, but the classic
+surface's broad bands lost visible coverage faster as intensity decreased.
+
+Sprinkles alone now uses `f * (1 + 0.75 * (1 - f))` for recharge visibility,
+where `f` is the existing fade. This keeps the broader surface readable into
+the retreat. The envelope is monotonic, starts/ends at zero and retains its
+original peak. Recharge progress, full-charge transition, half-second end,
+body displacement and Arm Shields distance/FOV limits remain unchanged.
+ENHANCED still uses the original visibility formula exactly. This adjustment
+changes neither preset's shader profile, texture parameters or RGB selection;
+it applies only while the recharge envelope is active. Damage, depletion,
+Overshield, map/settings cleanup and Arm Shields OFF still cancel/suppress
+through their established gates.
+
+The temporary diagnostic logging was removed from production sources.
+The comparison video uses only matching recorded simulation times and
+progress across all three columns (ENHANCED, Sprinkles before, Sprinkles
+after), with missing capture intervals held equally. It includes body/arms,
+a labelled one-third-speed retreat replay and an Arm Shields OFF control.
+Distinct classic/CMT surface patterns are preserved; the comparison verifies
+recharge behaviour and perceived fade rather than identical pattern pixels.
+
+The 101 focused tests include a regression that checks the Sprinkles-only
+visibility compensation, monotonic falloff, unchanged displacement, exact
+retreat endpoint and arm suppression, alongside existing profile/colour,
+Overshield and lifecycle checks. Windows, Android guest/host and web builds
+pass. Android/browser runtime visuals and live split-screen are not tested.
+
+Production Windows checks also passed recharge on CE Coldsnap 20th and MCC
+Mercury Falling using the existing isolated fixtures, retaining their colour
+selection. A Sprinkles-host/CLASSIC-client local network comparison passed
+26 seconds with no mismatched seconds or drift over 780 samples; one client
+correction was logged. Internet transport was not retested; no simulation
+or protocol changes require a network version change.
+
+Alignment evidence records 125 body and 123 arm sample times shared by all
+three captures, with zero difference in recorded time or recharge progress.
+The comparison video decodes successfully. Cleanup removed about 6.3 GiB of
+disposable output; all 341 generated save/profile files were archived with
+SHA-256 verification and relative paths. About 11 MiB of evidence, logs and
+scripts remain under `build/shield-retreat`, with required platform builds
+and toolchains retained. Original maps and user saves were untouched.

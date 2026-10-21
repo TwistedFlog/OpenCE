@@ -9,6 +9,7 @@ enum { SHIELD_RECHARGE_MAXIMUM = 128 };
 struct shield_recharge
 {
 	boolean used, charging;
+	boolean classic_surface[2];
 	long object_index;
 	real seen, retreat, progress, fade;
 	struct shader const *shaders[2];
@@ -81,7 +82,7 @@ void shield_recharge_prepare(long object_index, struct render_model_effect const
 	struct shield_recharge *state = NULL, *available = NULL;
 	real now = global_frame_parameters.game_time_sec;
 	short i, side = arms ? 1 : 0;
-	boolean owned = FALSE;
+	boolean owned = FALSE, classic_surface = FALSE;
 	if (shield_recharge_changes != config_changes())
 		shield_recharge_reset();
 	if (!shield_look_enabled() || !effect || !effect->modifier_animation.values ||
@@ -89,7 +90,10 @@ void shield_recharge_prepare(long object_index, struct render_model_effect const
 		return;
 	for (i = 0; i < shield_look_count; i++)
 		if (effect->modifier_shader == (arms ? &shield_looks[i].arms.shader : &shield_looks[i].body.shader))
+		{
 			owned = TRUE;
+			classic_surface = shield_looks[i].sprinkles;
+		}
 	if (!owned || !(now >= 0.f && now < 10000000.f))
 		return;
 	object = object_try_and_get(object_index);
@@ -121,6 +125,7 @@ void shield_recharge_prepare(long object_index, struct render_model_effect const
 		state->object_index = object_index;
 	}
 	shield_recharge_update(state, object, now);
+	state->classic_surface[side] = classic_surface;
 	state->shaders[side] = effect->modifier_shader;
 	state->values[side] = effect->modifier_animation.values;
 }
@@ -159,12 +164,18 @@ void shield_recharge_draw(struct shader const *shader, real const *values, real 
 	short side;
 	struct shield_recharge const *state = shield_recharge_find(shader, values, &side);
 	struct shield_look_plasma const *profile = (struct shield_look_plasma const *)shader;
-	real maximum;
+	real maximum, visibility;
 	if (!state)
 		return;
 	/* Arms grow within their existing cap. Body peak is only 15% above the
 	approved offset; no profile, colour, texture or animation speed changes. */
 	maximum = viewmodel_shield_offset_amount(values, profile->offset_amount * (side ? 1.f : 1.15f));
 	*offset = maximum * (0.3f + 0.7f * state->progress) * state->fade;
-	*intensity = MAX(*intensity, (0.22f + 0.25f * state->progress) * state->fade);
+	visibility = state->fade;
+	/* The classic surface loses broad bands sooner as intensity falls.
+	Keep them readable through the shared retreat without changing its
+	duration, displacement, shader profile or the approved ENHANCED curve. */
+	if (state->classic_surface[side])
+		visibility *= 1.f + 0.75f * (1.f - visibility);
+	*intensity = MAX(*intensity, (0.22f + 0.25f * state->progress) * visibility);
 }

@@ -31,7 +31,7 @@ enum {_object_type_biped=0,_object_dead_bit=0,_object_shield_depleted_bit=1,_obj
 struct object_datum {struct {int type;unsigned damage_flags;int shield_stun_ticks;float shield_vitality;} object;};
 struct shader {int id;};
 struct shield_look_plasma {struct shader shader;real offset_amount;};
-struct {struct shield_look_plasma body,arms;} shield_looks[2];
+struct {struct shield_look_plasma body,arms;boolean sprinkles;} shield_looks[2];
 static short shield_look_count=2;
 struct render_model_effect {struct shader *modifier_shader;struct {real const *values;} modifier_animation;};
 struct {real game_time_sec;} global_frame_parameters;
@@ -83,6 +83,28 @@ int main(int argc,char **argv) {
  else if(!strcmp(argv[1],"not-charging"))objects[0].object.damage_flags=0;
  else if(!strcmp(argv[1],"classic")){enhanced=0;changes++;}
  else if(!strcmp(argv[1],"reset"))shield_recharge_reset();
+ else if(!strcmp(argv[1],"sprinkles")) {
+  real enhanced_i, enhanced_o, last_i=1.f;
+  shield_looks[0].sprinkles=1;shield_recharge_reset();
+  e=prepare(0,.999f,4.f,0);i=o=0;draw(&e,&i,&o);assert(i<.471f);
+  e=prepare(0,1.f,4.1f,0);
+  for(n=1;n<15;n++) {
+   real t=4.1f+n/30.f;
+   e=prepare(0,1.f,t,0);i=o=0;draw(&e,&i,&o);
+   assert(i>0 && i<last_i);last_i=i;
+   enhanced_i=.47f*shield_recharges[0].fade;
+   enhanced_o=.0125f*1.15f*shield_recharges[0].fade;
+   assert(i>enhanced_i && i<=enhanced_i*1.75f);
+   assert(o==enhanced_o);
+   shield_looks[0].sprinkles=0;e=prepare(0,1.f,t,0);i=o=0;draw(&e,&i,&o);
+   assert(i==enhanced_i && o==enhanced_o);
+   shield_looks[0].sprinkles=1;
+  }
+  e=prepare(0,1.f,4.61f,0);i=.123f;o=.002f;draw(&e,&i,&o);assert(i==.123f && o==.002f);
+  assert(!shield_recharge_visible(e.modifier_shader,e.modifier_animation.values));
+  shield_recharge_reset();a=prepare(0,.5f,5.f,1);i=o=0;draw(&a,&i,&o);assert(o<=.004f);
+  arms=0;changes++;assert(!shield_recharge_visible(a.modifier_shader,a.modifier_animation.values));return 0;
+ }
  else if(!strcmp(argv[1],"arms")) {
   a=prepare(0,.5f,3.f,1);b=prepare(1,.8f,3.f,2);
   i=o=0;draw(&a,&i,&o);assert(o>0 && o<=.004f);low=o;
@@ -122,7 +144,7 @@ int main(int argc,char **argv) {
     assert result.returncode==0,result.stdout+result.stderr
     return output
 
-@pytest.mark.parametrize('case',['damage','dead','depleted','overcharging','not-charging','classic','reset','arms','respawn','time','capacity','unrelated','full'])
+@pytest.mark.parametrize('case',['damage','dead','depleted','overcharging','not-charging','classic','reset','arms','respawn','time','capacity','unrelated','full','sprinkles'])
 def test_recharge(recharge_tool,case):
     result=subprocess.run([str(recharge_tool),case],capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
