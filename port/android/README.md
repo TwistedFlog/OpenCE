@@ -74,6 +74,19 @@ of the whole `save` folder stops there.
 
 ## Game data
 
+MCC maps need a fixed 64 MiB virtual address window for their linked tags.
+The Android host attempts to reserve the usual `0x50000000` window at app
+startup, before the guest and renderer allocate memory. This reserves address
+space, not 64 MiB of physical RAM. Unloading an MCC map discards its pages
+but retains the reservation for the next load; exiting the process releases it.
+Xbox and Custom Edition keep their existing memory paths.
+
+If another mapping already occupies the window, the app leaves it untouched
+and MCC loading fails safely. Logcat (`halo`) lists overlapping mappings;
+the load error in `debug.txt` identifies the requested address. This is an
+address-space conflict, not a duplicate map file. Early reservation cannot
+guarantee that every device makes this address available.
+
 The game needs the `maps/` folder from an Xbox disc image (`.xiso` or
 `.iso`) of any version of the game. The app extracts `maps/` from the disc
 image. The app keeps the data in `/sdcard/Android/data/com.halo.decomp/files`.
@@ -548,3 +561,21 @@ uninstalling the old app and installing the new one (see the backup commands
 above). Uninstalling deletes the app's data. Later releases signed with the
 permanent key can update in place. Stable signing does not guarantee that
 Google Play Protect immediately removes an unfamiliar-developer warning.
+
+## Custom Edition texture storage
+
+Cached Custom Edition textures on Android use stable individual allocations,
+created on demand with a 128 MiB pixel limit and 8,192-entry limit, outside the
+fixed Xbox memory window. This avoids exhausting the old arena with textures
+needed in the same frame and avoids re-uploading surviving textures after
+compaction. Current-frame entries cannot be evicted. Normal GPU caching,
+texture conversion, HUD replacements and the geometry streaming fix remain;
+GL shadow state is refreshed before each draw. Desktop, web and other map
+storage paths retain their established behavior. Fullscreen behavior is unchanged.
+
+Cleanup releases bindings and GPU copies before pixel/header reuse. Map unload,
+cache flush and mod reload release the stored pixels. Diagnostics are limited to
+an unload summary and the first allocation failure per cache lifetime in the
+normal platform log. No test log files, per-frame reports, texture fingerprints
+or uniform readbacks run in the permanent build. The cache can still exhaust
+its limit or system memory; normal fallback handling remains available.
