@@ -177,6 +177,26 @@ int main() {
         grid=.2f; vec4 body_dim=shield_honeycomb_surface(original);
         grid=.9f; vec4 body_bright=shield_honeycomb_surface(original);
         assert(body_bright.z>body_dim.z && body_bright.a==original.a);
+        shield_honeycomb[0].x=3.f;
+        // Keep the grid fixed: only the real plasma changes over time.
+        vec4 dark({0.f,0.f,0.f},original.a);
+        vec4 lit({0.f,.48f,.8f},original.a);
+        grid=0.f; vec4 low_base=shield_honeycomb_surface(dark);
+        vec4 high_base=shield_honeycomb_surface(lit);
+        grid=.9f; vec4 low=shield_honeycomb_surface(dark);
+        vec4 high=shield_honeycomb_surface(lit);
+        assert(low.z>low_base.z); // A faint continuous link in dark gaps.
+        assert(high.z-high_base.z > 10.f*(low.z-low_base.z));
+        assert(high.a==original.a && low.a==original.a);
+        assert(low.x==0.f && fabs(low.y/low.z-.6f)<.00001f);
+        assert(high.x==0.f && fabs(high.y/high.z-.6f)<.00001f);
+        // Classic white highlights must light the links too, as on arms.
+        vec4 highlight({.8f,.8f,.8f},original.a);
+        vec4 white=shield_honeycomb_surface(highlight);
+        assert(white.x>.45f*.8f); // Palette red is zero, but plasma has a highlight.
+        xD1=vec4({1.f,0.f,0.f},.5f);
+        vec4 red=shield_honeycomb_surface(vec4({.8f,0.f,0.f},original.a));
+        assert(fabs(red.x-high.z)<.00001f && red.y==0.f && red.z==0.f);
         shield_honeycomb[0].x=1.f;
         vec4 arms_again=shield_honeycomb_surface(original);
         assert(arms_again.x==bright.x && arms_again.y==bright.y && arms_again.z==bright.z && arms_again.a==bright.a);

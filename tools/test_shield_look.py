@@ -65,7 +65,7 @@ def test_menu_and_default():
     import port_settings
     spec = port_settings.SCREENS["video_settings/fov_viewmodels"]
     row = next(row for row in spec["rows"] if row[1] == "display.shield_look")
-    assert row[2] == [("CLASSIC", "classic"), ("CLASSIC WITH SPRINKLES", "classic_with_sprinkles"), ("CLASSIC HONEYCOMB", "classic_honeycomb"), ("ENHANCED", "enhanced"), ("ENHANCED HONEYCOMB", "honeycomb")]
+    assert row[2] == [("CLASSIC", "classic"), ("CLASSIC WITH SPRINKLES", "classic_with_sprinkles"), ("CLASSIC HONEYCOMB", "classic_honeycomb2"), ("MARK VI", "enhanced"), ("HONEYCOMB LAYERED", "classic_honeycomb"), ("HONEYCOMB CLEAR", "honeycomb")]
     assert "video_settings/shield_look" not in port_settings.SCREENS
     assert not list((ROOT / "port/assets/menus/ce").glob("*.shield_look.xml"))
     assert "video_settings.shield_look.xml" not in (ROOT / "port/assets/menus/menus.json").read_text()
@@ -261,6 +261,7 @@ def test_classic_honeycomb_profile(shield_tool):
 
 
 @pytest.mark.parametrize("case", ["colors", "classic", "invalid-setting", "missing", "no-noise", "arms-off", "split", "toggle", "reload", "capacity", "malformed-noise"])
-def test_classic_honeycomb_lifecycle(shield_tool, case):
-    run = subprocess.run([str(shield_tool), case, "classic_honeycomb"], capture_output=True, text=True, timeout=15)
+@pytest.mark.parametrize("look", ["classic_honeycomb", "classic_honeycomb2"])
+def test_classic_honeycomb_lifecycle(shield_tool, case, look):
+    run = subprocess.run([str(shield_tool), case, look], capture_output=True, text=True, timeout=15)
     assert run.returncode == 0, run.stdout + run.stderr

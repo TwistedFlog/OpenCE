@@ -1,8 +1,24 @@
 # Shield Look
 
-Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default),
-CLASSIC WITH SPRINKLES, CLASSIC HONEYCOMB, ENHANCED or ENHANCED HONEYCOMB, in that order. The former ENHANCED 2 profile
-is now the sole ENHANCED look.
+Video Setup > FOV and Viewmodels > SHIELD LOOK offers these presets in order:
+
+| Menu label | Saved configuration value | Previous menu label |
+| --- | --- | --- |
+| CLASSIC (default) | `classic` | CLASSIC |
+| CLASSIC WITH SPRINKLES | `classic_with_sprinkles` | CLASSIC WITH SPRINKLES |
+| CLASSIC HONEYCOMB | `classic_honeycomb2` | CLASSIC HONEYCOMB 2 |
+| MARK VI | `enhanced` | ENHANCED |
+| HONEYCOMB LAYERED | `classic_honeycomb` | CLASSIC HONEYCOMB |
+| HONEYCOMB CLEAR | `honeycomb` | ENHANCED HONEYCOMB |
+
+Only the displayed names and order changed. Saved values retain their exact
+profiles, so existing selections do not change appearance. The menu/default
+regression passes, Windows/Android/web builds pass, and all six labels were
+visually checked in the Windows FOV and Viewmodels menu. This rename changes
+no shader, profile, network or map-family behaviour. Historical design
+and validation notes below retain the names used when those checks were run.
+The former ENHANCED 2 profile is the current MARK VI look.
+
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
 small outward body flare, overriding map-authored shield modifiers except custom colour. This is a local rendering feature in `port/linux/game/shield_look.c`.
@@ -902,3 +918,78 @@ rerun. The previous 780-tick no-drift network check remains the last network
 validation; this correction changes no simulation or protocol. Self-review
 covered the full diff. Evidence is in build/classic-honeycomb-body; temporary
 maps/captures/binaries are removed and test saves archived with verified hashes.
+
+
+## CLASSIC HONEYCOMB (formerly CLASSIC HONEYCOMB 2)
+
+`display.shield_look = "classic_honeycomb2"` is a separate option immediately
+following CLASSIC WITH SPRINKLES in FOV and Viewmodels. The original option and all
+other presets retain their existing formulas. CLASSIC remains the default.
+
+The body links take their light directly from the resolved Classic plasma,
+including its moving white highlights, as the approved first-person composite
+does. In the body formula, `original.rgb * (0.45 + pattern * 1.5)` supplies the
+Classic membrane and plasma-lit links; `resolved_colour * pattern * 0.08`
+retains only a faint connecting core between waves. The body's original alpha
+is preserved, so its hit, recharge and retreat envelope stays authoritative.
+Grid coordinates, density, geometry and displacement are unchanged. The
+first-person arms use the existing Classic Honeycomb composition unchanged,
+including the Arm Shields gate and distance/FOV cap.
+
+The earlier trial multiplied a separate palette-coloured grid by a bounded
+pre-colour noise mask. Its prominent constant core and lack of the Classic
+highlight response did not deliver the requested arm-like brightness flow.
+The correction multiplies the grid through actual plasma RGB instead. It needs
+no extra combiner-register input, so the temporary pixel-translator argument
+has been removed. The correction is entirely in the feature-owned shader helper;
+no source/, engine translator, map loader or compatibility changes remain.
+Only mode 3 uses this body formula. Modes 0, 1 and 2 retain their existing
+formulas, and scale-zero draws still return the original fragment.
+
+A separate cached profile flag distinguishes the new body mode from queued
+Classic Honeycomb draws. Both arms still select mode 1. Existing feature reset
+and draw-uniform cleanup handle switching and map boundaries. The profile is
+otherwise identical, retaining Classic With Sprinkles colour authority, authored
+colours, overshield precedence, arcs, recharge and retreat. No simulation or
+network protocol changes are involved.
+
+Validation: 151 focused shield tests pass. The revised composition regression
+holds the hex grid fixed while changing the actual Classic plasma and requires
+the link contribution to brighten with it, including a white highlight when
+that palette channel is zero. It failed on the earlier formula before passing
+with the correction. Profile identity, queued-mode separation, map/object
+colours, lifecycle/capacity, the exact arm formula and the faint body-link core
+are also covered. Windows, Android and web production builds pass. Self-review
+covered the full diff; no independent review ran. Capture instrumentation is
+removed from production sources and builds.
+
+
+Windows captures compare the previous and corrected CLASSIC HONEYCOMB 2 at
+138 matched body samples and 137 arm samples, with identical game time and
+intensity. Body displacement matches exactly. The unchanged idle-pose arm cap
+differs by at most 0.000054 model units. A second, clearly labelled capture
+holds the body's intensity at 1 and displacement at 0.0125 for 100 samples
+from 9.6 to 12.9 seconds. Its close-up shows moving link highlights separately
+from the recharge envelope. These fixed-flare holds are capture-only hooks.
+The comparison includes normal recharge/retreat, the held flare and unchanged
+arms, and passes a full video decode check.
+
+Production checks on bounded CE Coldsnap 20th and MCC Mercury Falling fixtures
+retain their red and starting-player gold colours, respectively, with arcs
+and normal recharge. A separate Xbox Arm Shields OFF run has no arm layer.
+Original maps and saves remain untouched. Runtime visuals were checked on
+Windows/OpenGL only; Linux builds, Android/web visuals, internet transport,
+live map-family transitions and overshield pickup visuals were not rerun.
+The existing overshield regressions pass and its precedence code is unchanged.
+This fragment-only correction changes no simulation/protocol code; the previous
+26-second / 771-tick net_compare pass remains the latest network check, with
+zero position drift, one client correction and three seconds of differing
+shield reports.
+
+Evidence, test/build logs and reproduction scripts are in
+build/classic-honeycomb2-flow. The previous trial evidence remains in
+build/classic-honeycomb2. This run's disposable fixtures, raw captures, temporary
+binaries and generated map caches are removed after verification. Test saves
+are archived losslessly with original relative paths and verified SHA256 hashes.
+The production build and installed toolchains remain. The finalized menu names
+and their stable configuration values are listed at the top of this document.
