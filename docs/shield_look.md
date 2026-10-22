@@ -741,3 +741,61 @@ paths and verified SHA-256 hashes before removing loose copies. About 37 MiB
 of evidence, logs, scripts and archived saves remain in
 `build/shield-honeycomb`; production builds and installed toolchains remain.
 Original maps and user saves were untouched.
+
+## Honeycomb link refinement
+
+The regular UV hexagons remain the basis of the surface. Their linear size
+is reduced by 20% on body and arms (scales 87.5 and 225), increasing the cell
+count over the same area by about 56%. The shell displacement, ENHANCED
+profiles, inherited RGB, recharge envelope and Arm Shields gates are unchanged.
+This correction lives in the existing shield feature and its procedural GLSL;
+it adds no shared-engine hooks or map-family compatibility changes.
+
+The edge band is wider with a softer surrounding halo and a small, bounded
+contribution from the existing plasma alpha. This gives the surface more
+visual substance without moving it farther from the armour. The baseline
+is deliberately subdued: a continuous spatial pulse brightens and dims both
+links and their glow, rather than leaving a uniformly bright wire grid.
+The original per-cell pulse could assign different brightness to opposite
+sides of a shared link. Sampling a continuous field removes that discontinuity
+while retaining visible variation. Filtering uses the unfolded UV footprint,
+since derivatives of the folded edge distance can cancel at shared edges;
+unresolved cells fade to their approximate average instead of sparkling.
+
+These changes do not weld model geometry or re-unwrap UV islands. Separate
+displaced pieces, UV seams and different texel densities remain visible on
+some models. This is a refinement of the regular pattern, not a claim of a
+seamless shell on every authored model.
+
+The focused suite passes 164 checks, with the five optional asset checks
+subsequently passing using the local stock, CMT and Bigass maps (169 unique
+checks in total). The new regression executes the shipped pattern with fixed
+pixel derivatives and samples both sides of all six shared edges over time,
+checking continuity, a persistent dim link and a distinct pulse. It also
+checks convergence when cells become subpixel. This CPU check does not replace
+GPU visual testing. Clean Windows, Android and web production builds pass.
+
+Windows body/arm captures compare 70 matched samples each, with zero recorded
+differences in simulation time, intensity or displacement. A temporary hook
+holds the existing full-hit intensity and displacement from 11 to 12 seconds
+for maximum-flare inspection; the video labels this controlled interval and
+also shows recharge and retreat. The hook is absent from production sources
+and builds. The video decodes successfully. Matching time does not guarantee
+identical weapon idle poses.
+
+Clean-production Windows checks cover Arm Shields OFF, CE Coldsnap 20th's
+authored red and MCC Mercury Falling's starting-player gold on the existing
+bounded fixtures. A two-peer Honeycomb-host/CLASSIC-client check passed 26
+compared seconds, 780 samples, no drift and no client corrections. No protocol
+or simulation state changed, so no network version increment is required.
+Android/browser runtime visuals, internet transport, full campaign play and
+runtime map-family transitions were not retested. Other presets retain their
+profiles and scale-zero bypass; their visual output was not recaptured in
+this refinement.
+
+Temporary captures, fixtures, binaries and generated caches were removed.
+All 403 test save/profile files were archived with their relative paths and
+verified SHA-256 hashes before removing loose copies. The comparison video,
+diagnostic stills, logs and scripts remain in `build/honeycomb-refinement`;
+production builds and installed toolchains remain available. Original maps
+and user saves were untouched.

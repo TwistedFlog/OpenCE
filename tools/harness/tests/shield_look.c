@@ -189,11 +189,11 @@ int main(int argc, char **argv)
         CHECK(!shield_look_honeycomb_scale(enhanced));
         setting = "honeycomb";
         honeycomb = shield_look_body(0, &stock.shader);
-        CHECK(honeycomb != enhanced && shield_look_honeycomb_scale(honeycomb) == 70.f);
+        CHECK(honeycomb != enhanced && shield_look_honeycomb_scale(honeycomb) == 87.5f);
         CHECK(!memcmp(honeycomb, &saved, sizeof(saved)));
         CHECK(draw_arms(0, 0, 7, &effect));
         arms = effect.modifier_shader;
-        CHECK(shield_look_honeycomb_scale(arms) == 180.f);
+        CHECK(shield_look_honeycomb_scale(arms) == 225.f);
         CHECK(effect.modifier_animation.values == arm_values[0]);
         arm_setting = 0; CHECK(!draw_arms(0, 0, 7, &effect));
         CHECK(!effect.modifier_shader);

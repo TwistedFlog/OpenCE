@@ -411,7 +411,7 @@ real shield_look_honeycomb_scale(struct shader const *shader)
 		struct shield_look_entry const *entry = &shield_looks[index];
 		if (entry->eligible && entry->honeycomb &&
 			(shader == &entry->body.shader || shader == &entry->arms.shader))
-			return shader == &entry->arms.shader ? 180.f : 70.f;
+			return shader == &entry->arms.shader ? 225.f : 87.5f;
 	}
 	return 0.f;
 }
