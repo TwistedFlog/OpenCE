@@ -866,3 +866,39 @@ is retained under build/classic-honeycomb. Test saves are archived with paths
 and verified hashes before removing loose copies. Disposable fixtures,
 captures, binaries and generated map caches are removed; the current production
 build and installed toolchains remain available. Nothing was pushed to main.
+
+
+### Classic Honeycomb body link visibility correction
+
+The original composite tinted its grid with the final Classic fragment RGB.
+Inspection of the translated plasma shader showed that RGB already contains
+the noise mask, not just the resolved palette. This erased body links between
+bright plasma bands; the first-person result was separately approved.
+
+Only the Classic Honeycomb body now combines 45% of the original plasma RGB
+with 85% of the pulsing grid tinted by the existing resolved vertex colour
+(xD1), before the plasma noise mask. It retains the original fragment alpha,
+so hit/recharge/retreat and overshield fades remain authoritative. The vertex
+colour comes from the same Classic profile, authored-colour overrides, object
+tint and viewing-angle calculation; no Enhanced palette is substituted.
+The arm branch is byte-for-byte unchanged. Density, geometry, offsets and all
+other presets are unchanged. The existing feature-owned draw mode distinguishes
+arms (1) and body (2); the shared call only forwards that mode.
+
+Validation: 140 focused tests pass, including a dark-plasma regression that
+requires visible, colour-matched body links and exact preservation of the arm
+formula. Windows, Android and web production builds pass. Windows Beaver Creek
+captures compare 66 body and 69 arm samples at identical time and intensity.
+Body displacement matches exactly; idle-pose-dependent arm caps differ by at
+most 0.000066 model units. The labelled maximum flare is held by temporary
+capture-only instrumentation, removed from production. The video includes
+recharge/retreat, passes a full decode, and shows body links across dark regions.
+
+Production checks on the bounded CE Coldsnap 20th and MCC Mercury Falling
+fixtures retain their red and starting-player gold, with visible body links,
+depleted arcs and recharge. Runtime validation is Windows/OpenGL only; Linux
+builds, Android/web visuals, internet play and map-family transitions were not
+rerun. The previous 780-tick no-drift network check remains the last network
+validation; this correction changes no simulation or protocol. Self-review
+covered the full diff. Evidence is in build/classic-honeycomb-body; temporary
+maps/captures/binaries are removed and test saves archived with verified hashes.

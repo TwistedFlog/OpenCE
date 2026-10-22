@@ -364,7 +364,7 @@ void rasterizer_plasma_energy_draw(
 		{
 			IDirect3DDevice8_SetRenderState(global_d3d_device, D3DRS_CULLMODE, D3DCULL_CCW);
 			d3d8_gl_set_shield_honeycomb(honeycomb_scale, global_frame_parameters.game_time_sec,
-				color_constants[1], color_constants[2], shield_look_honeycomb_classic(group->shader));
+				color_constants[1], color_constants[2], shield_look_honeycomb_classic_mode(group->shader));
 		}
 		rasterizer_transparent_geometry_group_draw__internal(
 			(struct transparent_geometry_group const *)group,

@@ -222,23 +222,23 @@ int main(int argc, char **argv)
         mixed = shield_look_body(0, &stock.shader);
         CHECK(mixed != sprinkles && !memcmp(mixed, &saved_body, sizeof(saved_body)));
         CHECK(shield_look_honeycomb_scale(mixed) == 87.5f);
-        CHECK(shield_look_honeycomb_classic(mixed));
-        CHECK(!shield_look_honeycomb_classic(sprinkles));
+        CHECK(shield_look_honeycomb_classic_mode(mixed) == 2);
+        CHECK(!shield_look_honeycomb_classic_mode(sprinkles));
         CHECK(draw_arms(0, 0, 7, &effect)); hands = effect.modifier_shader;
         CHECK(!memcmp(hands, &saved_arms, sizeof(saved_arms)));
-        CHECK(shield_look_honeycomb_scale(hands) == 225.f && shield_look_honeycomb_classic(hands));
+        CHECK(shield_look_honeycomb_scale(hands) == 225.f && shield_look_honeycomb_classic_mode(hands) == 1);
         CHECK(effect.modifier_animation.values == arm_values[0]);
         stock.perpendicular_color.red = 0.f; stock.perpendicular_color.green = 1.f; stock.perpendicular_color.blue = 0.f;
         a = saved_body.perpendicular_color; b = saved_body.parallel_color;
         CHECK(shield_look_colors(mixed, NULL, &a, &b));
         CHECK(a.red == 0.f && a.green == 1.f && a.blue == 0.f);
         arm_setting = 0; CHECK(!draw_arms(0, 0, 7, &effect)); CHECK(!effect.modifier_shader);
-        setting = "honeycomb"; CHECK(!shield_look_honeycomb_classic(shield_look_body(0, &stock.shader)));
-        CHECK(shield_look_honeycomb_classic(mixed)); /* queued draw retains identity */
+        setting = "honeycomb"; CHECK(!shield_look_honeycomb_classic_mode(shield_look_body(0, &stock.shader)));
+        CHECK(shield_look_honeycomb_classic_mode(mixed) == 2); /* queued draw retains identity */
         setting = "classic_with_sprinkles";
         CHECK(shield_look_body(0, &stock.shader) == sprinkles && !memcmp(sprinkles, &saved_body, sizeof(saved_body)));
         setting = "classic"; CHECK(shield_look_body(0, &stock.shader) == &stock.shader);
-        shield_look_reset(); CHECK(!shield_look_honeycomb_classic(mixed));
+        shield_look_reset(); CHECK(!shield_look_honeycomb_classic_mode(mixed));
         CHECK(!shield_look_honeycomb_scale(hands));
         return 0;
     }

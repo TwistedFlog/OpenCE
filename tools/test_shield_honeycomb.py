@@ -145,12 +145,13 @@ struct vec3 { float x,y,z;
     vec3 operator+(vec3 b) { return {x+b.x,y+b.y,z+b.z}; }
     vec3 operator*(float f) { return {x*f,y*f,z*f}; }
 };
+vec3 clamp(vec3 c,float lo,float hi) { return {min(max(c.x,lo),hi),min(max(c.y,lo),hi),min(max(c.z,lo),hi)}; }
 struct vec4 { float x,y,z; union {float w; float a;};
     vec4(): x(0),y(0),z(0),w(0) {}
     vec4(vec3 c,float alpha): x(c.x),y(c.y),z(c.z),w(alpha) {}
     vec3 rgb() { return {x,y,z}; }
 };
-vec4 shield_honeycomb[3],xD0;
+vec4 shield_honeycomb[3],xD0,xD1;
 vec2 shield_uv;
 float grid;
 float shield_hex(vec2,float) { return grid; }
@@ -168,6 +169,17 @@ int main() {
         assert(dim.x==original.x && dim.y==original.y && dim.z==original.z);
         assert(bright.x==original.x && bright.y==original.y && bright.z==original.z);
         assert(bright.a>dim.a && dim.a>=original.a*.65f);
+        assert(fabs(bright.a-(original.a*.65f+.5f*grid*.65f))<.00001f);
+        shield_honeycomb[0].x=2.f; xD1=vec4({0.f,.6f,1.f},.5f);
+        vec4 gap=shield_honeycomb_surface(vec4({0.f,0.f,0.f},original.a));
+        assert(gap.x==0.f && gap.y>0.f && gap.z>gap.y && gap.a==original.a);
+        assert(fabs(gap.y/gap.z-.6f)<.00001f);
+        grid=.2f; vec4 body_dim=shield_honeycomb_surface(original);
+        grid=.9f; vec4 body_bright=shield_honeycomb_surface(original);
+        assert(body_bright.z>body_dim.z && body_bright.a==original.a);
+        shield_honeycomb[0].x=1.f;
+        vec4 arms_again=shield_honeycomb_surface(original);
+        assert(arms_again.x==bright.x && arms_again.y==bright.y && arms_again.z==bright.z && arms_again.a==bright.a);
         shield_honeycomb[0].x=0.f;
         vec4 enhanced=shield_honeycomb_surface(original);
         float expected=.5f*grid+min(max(original.a,0.f),.5f)*.04f;

@@ -419,7 +419,8 @@ real shield_look_honeycomb_scale(struct shader const *shader)
 	return 0.f;
 }
 
-boolean shield_look_honeycomb_classic(struct shader const *shader)
+/* Draw-local composition: 0 is disabled, 1 is arms, 2 is the body. */
+short shield_look_honeycomb_classic_mode(struct shader const *shader)
 {
 	short index;
 	for (index = 0; index < shield_look_count; index++)
@@ -427,9 +428,9 @@ boolean shield_look_honeycomb_classic(struct shader const *shader)
 		struct shield_look_entry const *entry = &shield_looks[index];
 		if (entry->eligible && entry->honeycomb && entry->sprinkles &&
 			(shader == &entry->body.shader || shader == &entry->arms.shader))
-			return TRUE;
+			return shader == &entry->arms.shader ? 1 : 2;
 	}
-	return FALSE;
+	return 0;
 }
 
 void shield_look_reset(void)
