@@ -99,7 +99,8 @@ static boolean shield_look_enabled(void)
 {
 	char const *value = config_string("display.shield_look");
 	return value && (!strcmp(value, "enhanced") || !strcmp(value, "enhanced2") ||
-		!strcmp(value, "classic_with_sprinkles") || !strcmp(value, "honeycomb"));
+		!strcmp(value, "classic_with_sprinkles") || !strcmp(value, "honeycomb") ||
+		!strcmp(value, "classic_honeycomb"));
 }
 
 static uint32_t shield_look_hash(uint32_t hash, void const *data, size_t size)
@@ -241,8 +242,10 @@ static struct shield_look_entry *shield_look_for_unit(long object_index, long ha
 
 	if (!shield_look_enabled())
 		return NULL;
-	sprinkles = !strcmp(config_string("display.shield_look"), "classic_with_sprinkles");
-	honeycomb = !strcmp(config_string("display.shield_look"), "honeycomb");
+	sprinkles = !strcmp(config_string("display.shield_look"), "classic_with_sprinkles") ||
+		!strcmp(config_string("display.shield_look"), "classic_honeycomb");
+	honeycomb = !strcmp(config_string("display.shield_look"), "honeycomb") ||
+		!strcmp(config_string("display.shield_look"), "classic_honeycomb");
 	object = object_try_and_get(object_index);
 	if (!object || object->object.type != _object_type_biped)
 		return NULL;
@@ -414,6 +417,19 @@ real shield_look_honeycomb_scale(struct shader const *shader)
 			return shader == &entry->arms.shader ? 225.f : 87.5f;
 	}
 	return 0.f;
+}
+
+boolean shield_look_honeycomb_classic(struct shader const *shader)
+{
+	short index;
+	for (index = 0; index < shield_look_count; index++)
+	{
+		struct shield_look_entry const *entry = &shield_looks[index];
+		if (entry->eligible && entry->honeycomb && entry->sprinkles &&
+			(shader == &entry->body.shader || shader == &entry->arms.shader))
+			return TRUE;
+	}
+	return FALSE;
 }
 
 void shield_look_reset(void)

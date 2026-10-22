@@ -32,6 +32,14 @@ static const char shield_honeycomb_glsl[] =
 	"    float time = shield_honeycomb[1].w;\n"
 	"    float pattern = shield_hex(shield_uv * shield_honeycomb[0].w, time);\n"
 	"    float energy = shield_honeycomb[2].a*xD0.a;\n"
+	/* Classic owns the fully resolved RGB, including its view-angle blend.
+	Only opacity combines here; neither layer introduces a second palette. */
+	"    if (shield_honeycomb[0].x != 0.0)\n"
+	"    {\n"
+	"        float plasma = max(original.a,0.0)*0.65;\n"
+	"        float links = energy*pattern*0.65;\n"
+	"        return vec4(original.rgb,plasma+links);\n"
+	"    }\n"
 	"    float membrane = min(max(original.a,0.0),energy)*0.04;\n"
 	"    return vec4(shield_honeycomb[2].rgb + shield_honeycomb[1].rgb*0.65,energy*pattern+membrane);\n"
 	"}\n";

@@ -1,7 +1,7 @@
 # Shield Look
 
 Video Setup > FOV and Viewmodels > SHIELD LOOK selects CLASSIC (the default),
-CLASSIC WITH SPRINKLES, ENHANCED or ENHANCED HONEYCOMB, in that order. The former ENHANCED 2 profile
+CLASSIC WITH SPRINKLES, CLASSIC HONEYCOMB, ENHANCED or ENHANCED HONEYCOMB, in that order. The former ENHANCED 2 profile
 is now the sole ENHANCED look.
 `display.shield_look = "enhanced"`, or `HALO_SHIELD_LOOK=enhanced`, selects
 CMT Snow Grove's plasma pattern and first-person parameters with the approved
@@ -799,3 +799,70 @@ verified SHA-256 hashes before removing loose copies. The comparison video,
 diagnostic stills, logs and scripts remain in `build/honeycomb-refinement`;
 production builds and installed toolchains remain available. Original maps
 and user saves were untouched.
+
+
+## CLASSIC HONEYCOMB
+
+`display.shield_look = "classic_honeycomb"` combines the CLASSIC WITH
+SPRINKLES profile with the existing smaller pulsing honeycomb grid. It sits
+immediately after CLASSIC WITH SPRINKLES in FOV & Viewmodels. CLASSIC remains
+the default, and the four existing profiles and their shader formulas are
+unchanged.
+
+Both components use the original Classic plasma fragment's resolved RGB,
+including its viewing-angle blend, map-authored colour inheritance, object
+colour channels and animated Overshield precedence. The new composite adds
+65% of the original plasma opacity to 65% of the honeycomb opacity. The plasma
+fills the spaces between links while the grid retains its continuous spatial
+pulse and persistent dim edges. This avoids adding two full-bright surfaces.
+It uses the same draw and shell; there is no second geometry layer or added
+displacement. Body and arms use the existing 87.5 and 225 cell scales.
+
+The feature-owned profile uses both the Sprinkles and Honeycomb flags, so it
+inherits the Classic recharge/retreat visibility compensation, common arcs,
+map-colour rules and Arm Shields gate/cap. Queued draws select the mode by
+retained shader identity. Existing reset paths clear it on map load/unload.
+The only shared-engine change extends the existing draw-local honeycomb
+setter with a Classic-composite flag, stored in an unused uniform component.
+This is necessary because the feature module cannot access the final plasma
+fragment colour. Pattern/composition logic stays in shield_honeycomb_gl.h;
+there are no map-family loader or compatibility changes. Scale-zero draws
+still return the original fragment and clear the composite flag.
+
+UV seams, disconnected geometry and varying texel density remain as described
+above; the composite does not re-unwrap or weld models. Network messages and
+simulation are unchanged, so no protocol version increment is needed.
+
+
+Validation on Windows (release, portable, PGO/LTO off): 140 focused tests pass,
+including local Xbox, CMT and Bigass reference checks. The new tests execute
+the actual fragment composition and verify exact preservation of resolved
+RGB, independent link brightness, disabled bypass, uniform cleanup, profile
+identity, map/object colours, Arm Shields OFF and preset/reset/capacity paths.
+Production Windows, Android and web builds pass after removing all temporary
+capture instrumentation. This was self-reviewed; no independent review ran.
+
+The comparison uses bounded copies of Xbox Beaver Creek, with fixed spawn,
+scripted depletion and recharge, plus a clearly labelled capture-only hold
+of the existing maximum flare from 11 to 12 seconds. Each view has 70 matched
+time/intensity samples. Body displacement matches exactly. Arms retain the
+existing distance/FOV cap; differing idle poses cause a maximum recorded
+0.000238 model-unit displacement difference. The test did not change that cap.
+The video includes recharge, retreat and slowed maximum-flare views and passes
+a full decode check. The capture hook is absent from production sources.
+
+Production runs additionally cover CE Coldsnap 20th and MCC Mercury Falling
+body/arms with their red and starting-player gold respectively, depleted arcs,
+recharge and a separate Xbox Arm Shields OFF run. These use bounded local
+fixtures with fixed spawn/script access; they are not full campaign runs.
+A Classic Honeycomb host and CLASSIC client passed 26 compared seconds,
+780 ticks, with no drift or client corrections. Original maps were untouched.
+Android/web visual runtime, Linux native builds, internet transport, live
+map-family transitions and overshield pickup visuals were not rerun; the
+existing overshield tests and unchanged colour-precedence path were checked.
+
+Local evidence, including the comparison video, build/test logs and scripts,
+is retained under build/classic-honeycomb. Test saves are archived with paths
+and verified hashes before removing loose copies. Disposable fixtures,
+captures, binaries and generated map caches are removed; the current production
+build and installed toolchains remain available. Nothing was pushed to main.
